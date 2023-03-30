@@ -1,0 +1,13 @@
+[package]
+name = "sacrifice"
+description = "A chess library"
+version = "0.1.0"
+edition = "2021"
+
+repository = "https://github.com/fr-therook/sacrifice"
+license = "MIT"
+keywords = ["chess", "pgn"]
+
+[dependencies]
+shakmaty = "0.23"
+pgn-reader = "0.22"
