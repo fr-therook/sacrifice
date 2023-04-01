@@ -1,10 +1,11 @@
-use crate::Move;
 use super::writer::{Visitor, Skip};
+
+use crate::{Move, Position, Chess};
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use shakmaty::Position;
+use uuid::Uuid;
 
 #[derive(Clone)]
 struct PrevInfo {
@@ -18,51 +19,66 @@ struct NodeImpl {
     variation_vec: Vec<Node>,
 }
 
+// A node in the game tree.
 #[derive(Clone)]
-pub struct Node(Rc<RefCell<NodeImpl>>);
+pub struct Node {
+    // Actual relevant data, e.g. previous move, next moves
+    inner: Rc<RefCell<NodeImpl>>,
+
+    // Unique identifier for this node.
+    // Akin to pointer, but safer.
+    id: Uuid,
+}
 
 impl Node {
     pub fn new() -> Self {
-        let inner = Rc::new(RefCell::new(NodeImpl {
+        let inner = NodeImpl {
             prev: None,
             variation_vec: Vec::new(),
-        }));
-
-        Self(inner)
+        };
+        Self::from_inner(inner)
     }
 
     pub fn from_node(node: Self, prev_move: Move) -> Self {
-        let inner = Rc::new(RefCell::new(NodeImpl {
+        let inner = NodeImpl {
             prev: Some(PrevInfo { node, next_move: prev_move }),
             variation_vec: Vec::new(),
-        }));
+        };
 
-        Self(inner)
+        Self::from_inner(inner)
     }
 }
 
 impl Node {
+    fn from_inner(inner: NodeImpl) -> Self {
+        let inner = Rc::new(RefCell::new(inner));
+        let id = Uuid::new_v4();
+
+        Self {
+            inner,
+            id,
+        }
+    }
+}
+
+impl Node {
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
     pub fn parent(&self) -> Option<Node> {
-        self.0.borrow()
+        self.inner.borrow()
             .prev.as_ref().map(|v| v.node.clone())
     }
 
     pub fn prev_move(&self) -> Option<Move> {
-        self.0.borrow()
+        self.inner.borrow()
             .prev.as_ref().map(|v| v.next_move.clone())
     }
 
     pub fn mainline(&self) -> Option<Node> {
-        self.0.borrow()
+        self.inner.borrow()
             .variation_vec.get(0).map(|v| v.clone())
-    }
-
-    pub fn set_mainline(&self, node: Node) {
-        if self.0.borrow().variation_vec.is_empty() {
-            self.0.borrow_mut().variation_vec.push(node);
-        } else { // Replace mainline node
-            self.0.borrow_mut().variation_vec[0] = node;
-        }
     }
 
     pub fn root(&self) -> Node {
@@ -74,8 +90,7 @@ impl Node {
     }
 
     // Returns the number of half-moves from root to this node.
-    // Not the real ply for games with non-zero initial ply.
-    pub fn ply(&self) -> u32 {
+    pub fn depth(&self) -> u32 {
         let mut result: u32 = 0;
 
         let mut node: Node = self.clone();
@@ -90,7 +105,7 @@ impl Node {
         let mut move_vec: Vec<Move> = Vec::new();
 
         let mut node: Node = self.clone();
-        while let Some(prev_info) = (node.clone().0.borrow().prev).clone() {
+        while let Some(prev_info) = (node.inner.clone().borrow().prev).clone() {
             let parent = prev_info.node;
             let prev_move = prev_info.next_move;
 
@@ -104,7 +119,7 @@ impl Node {
         move_vec
     }
 
-    pub fn board(&self, initial_position: &shakmaty::Chess) -> shakmaty::Chess {
+    pub fn board(&self, initial_position: &Chess) -> Chess {
         let mut board = initial_position.clone();
 
         let move_vec = self.moves();
@@ -119,7 +134,7 @@ impl Node {
 impl Node {
     pub fn new_variation(&mut self, m: Move) -> Node {
         let next_node = Node::from_node(self.clone(), m);
-        self.0.borrow_mut()
+        self.inner.borrow_mut()
             .variation_vec.push(next_node.clone());
         next_node
     }
@@ -128,7 +143,7 @@ impl Node {
 impl Node {
     pub fn accept<V: Visitor>(
         &self,
-        initial_position: &shakmaty::Chess,
+        initial_position: &Chess,
         visitor: &mut V,
     ) {
         // Return if there's no child nodes
@@ -142,7 +157,7 @@ impl Node {
         );
 
         // Visit variation nodes after
-        let mut variation_node_vec = self.0.borrow()
+        let mut variation_node_vec = self.inner.borrow()
             .variation_vec.clone();
         variation_node_vec.remove(0);
         for variation_node in variation_node_vec {

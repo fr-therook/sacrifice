@@ -1,3 +1,4 @@
-mod game;
+pub use shakmaty::{Color, Square, Move, Position, Chess};
 
-pub use shakmaty::{Square, Move};
+mod game;
+pub use game::Game;

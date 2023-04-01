@@ -1,5 +1,4 @@
-use shakmaty::{Chess, Color, Position};
-use crate::Move;
+use crate::{Move, Color, Position, Chess};
 
 pub struct Skip(pub bool);
 
@@ -12,7 +11,7 @@ pub trait Visitor {
     fn visit_header(&mut self, tag_name: &str, tag_value: &str);
     fn end_headers(&mut self);
 
-    fn visit_move(&mut self, board: shakmaty::Chess, next_move: Move);
+    fn visit_move(&mut self, board: Chess, next_move: Move);
 
     fn begin_variation(&mut self) -> Skip;
     fn end_variation(&mut self);
