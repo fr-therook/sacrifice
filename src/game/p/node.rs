@@ -1,6 +1,6 @@
-use super::writer::{Visitor, Skip};
+use super::writer::{Skip, Visitor};
 
-use crate::{Move, Position, Chess};
+use crate::{Chess, Move, Position};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -14,6 +14,7 @@ struct PrevInfo {
     next_move: Move,
 }
 
+#[derive(Clone)]
 struct NodeImpl {
     prev: Option<PrevInfo>,
     variation_vec: Vec<Node>,
@@ -26,7 +27,7 @@ pub struct Node {
     inner: Rc<RefCell<NodeImpl>>,
 
     // Unique identifier for this node.
-    // Akin to pointer, but safer.
+    // Akin to pointer, but safer and FFI-friendly.
     id: Uuid,
 }
 
@@ -41,7 +42,10 @@ impl Node {
 
     pub fn from_node(node: Self, prev_move: Move) -> Self {
         let inner = NodeImpl {
-            prev: Some(PrevInfo { node, next_move: prev_move }),
+            prev: Some(PrevInfo {
+                node,
+                next_move: prev_move,
+            }),
             variation_vec: Vec::new(),
         };
 
@@ -54,10 +58,7 @@ impl Node {
         let inner = Rc::new(RefCell::new(inner));
         let id = Uuid::new_v4();
 
-        Self {
-            inner,
-            id,
-        }
+        Self { inner, id }
     }
 }
 
@@ -67,20 +68,23 @@ impl Node {
     }
 
     pub fn parent(&self) -> Option<Node> {
-        self.inner.borrow()
-            .prev.as_ref().map(|v| v.node.clone())
+        Some(self.inner.borrow().prev.clone()?.node)
     }
 
     pub fn prev_move(&self) -> Option<Move> {
-        self.inner.borrow()
-            .prev.as_ref().map(|v| v.next_move.clone())
+        Some(self.inner.borrow().prev.clone()?.next_move)
+    }
+
+    pub fn variations(&self) -> Vec<Node> {
+        self.inner.borrow().variation_vec.clone()
     }
 
     pub fn mainline(&self) -> Option<Node> {
-        self.inner.borrow()
-            .variation_vec.get(0).map(|v| v.clone())
+        self.inner.borrow().variation_vec.get(0).cloned()
     }
 
+    // Find the root node by traversing up the tree
+    #[allow(dead_code, unused_variables)]
     pub fn root(&self) -> Node {
         let mut node: Node = self.clone();
         while let Some(parent) = node.parent() {
@@ -90,6 +94,7 @@ impl Node {
     }
 
     // Returns the number of half-moves from root to this node.
+    #[allow(dead_code, unused_variables)]
     pub fn depth(&self) -> u32 {
         let mut result: u32 = 0;
 
@@ -134,31 +139,28 @@ impl Node {
 impl Node {
     pub fn new_variation(&mut self, m: Move) -> Node {
         let next_node = Node::from_node(self.clone(), m);
-        self.inner.borrow_mut()
-            .variation_vec.push(next_node.clone());
+        self.inner
+            .borrow_mut()
+            .variation_vec
+            .push(next_node.clone());
         next_node
     }
 }
 
 impl Node {
-    pub fn accept<V: Visitor>(
-        &self,
-        initial_position: &Chess,
-        visitor: &mut V,
-    ) {
+    pub fn accept<V: Visitor>(&self, initial_position: &Chess, visitor: &mut V) {
         // Return if there's no child nodes
-        let main_node = if let Some(val) =
-            self.mainline() { val } else { return; };
+        let main_node = if let Some(val) = self.mainline() {
+            val
+        } else {
+            return;
+        };
 
         // Visit the mainline node first
-        visitor.visit_move(
-            self.board(initial_position),
-            main_node.prev_move().unwrap(),
-        );
+        visitor.visit_move(self.board(initial_position), main_node.prev_move().unwrap());
 
         // Visit variation nodes after
-        let mut variation_node_vec = self.inner.borrow()
-            .variation_vec.clone();
+        let mut variation_node_vec = self.inner.borrow().variation_vec.clone();
         variation_node_vec.remove(0);
         for variation_node in variation_node_vec {
             if let Skip(true) = visitor.begin_variation() {

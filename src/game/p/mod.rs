@@ -6,4 +6,3 @@ pub use tree::GameTree;
 
 mod reader;
 mod writer;
-

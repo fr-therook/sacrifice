@@ -1,8 +1,8 @@
 use super::node::Node;
 use super::reader::read_pgn;
-use super::writer::{Visitor, PgnWriter};
+use super::writer::{PgnWriter, Visitor};
 
-use crate::Chess;
+use crate::{Chess, Move};
 
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -45,8 +45,40 @@ impl GameTree {
 }
 
 impl GameTree {
-    pub fn node_from_id(&self, id: Uuid) -> Option<Node> {
+    fn try_node(&self, id: Uuid) -> Option<Node> {
         self.node_map.get(&id).cloned()
+    }
+
+    pub fn root(&self) -> Uuid {
+        self.root.id()
+    }
+
+    pub fn exists(&self, node_id: Uuid) -> Option<Uuid> {
+        let node = self.try_node(node_id)?;
+        assert_eq!(node.id(), node_id, "id-node hashmap outdated");
+        Some(node.id())
+    }
+
+    pub fn parent(&self, node_id: Uuid) -> Option<Uuid> {
+        let node = self.try_node(node_id)?;
+        node.parent().map(|val| val.id())
+    }
+
+    pub fn children(&self, node_id: Uuid) -> Vec<Uuid> {
+        let node = if let Some(val) = self.try_node(node_id) {
+            val
+        } else {
+            return vec![];
+        };
+        node.variations()
+            .into_iter()
+            .map(|val| val.id())
+            .collect::<Vec<Uuid>>()
+    }
+
+    pub fn prev_move(&self, node_id: Uuid) -> Option<Move> {
+        let node = self.try_node(node_id)?;
+        node.prev_move()
     }
 }
 
@@ -59,6 +91,7 @@ impl std::fmt::Display for GameTree {
         };
         let line_vec = self.accept(&mut visitor);
 
+        // This always ends with \n.
         for line in line_vec {
             writeln!(f, "{}", line)?;
         }
@@ -77,10 +110,7 @@ impl GameTree {
         }
         visitor.end_headers();
 
-        self.root.accept(
-            &self.initial_position,
-            visitor,
-        );
+        self.root.accept(&self.initial_position, visitor);
 
         visitor.end_game()
     }

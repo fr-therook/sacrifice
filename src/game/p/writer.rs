@@ -1,4 +1,4 @@
-use crate::{Move, Color, Position, Chess};
+use crate::{Chess, Color, Move, Position};
 
 pub struct Skip(pub bool);
 
@@ -54,13 +54,13 @@ impl PgnWriter {
 
 impl PgnWriter {
     fn flush(&mut self) {
-        if self.cur_line.is_empty() { // Nothing to write
+        let cur_line = self.cur_line.trim();
+        if cur_line.is_empty() {
+            // Nothing to write
             return;
         }
 
-        self.line_vec.push(
-            self.cur_line.trim().to_string()
-        );
+        self.line_vec.push(cur_line.to_string());
         self.cur_line = String::new();
     }
 
@@ -96,9 +96,7 @@ impl Visitor for PgnWriter {
     }
 
     fn visit_header(&mut self, tag_name: &str, tag_value: &str) {
-        self.write_line(
-            format!("[{} \"{}\"]", tag_name, tag_value)
-        );
+        self.write_line(format!("[{} \"{}\"]", tag_name, tag_value));
     }
 
     fn end_headers(&mut self) {
@@ -133,7 +131,7 @@ impl Visitor for PgnWriter {
     }
 
     fn end_game(&mut self) -> Self::Result {
-        self.write_line(String::new());
-        std::mem::replace(&mut self.line_vec, Vec::new())
+        self.flush(); // Or write a new line?
+        std::mem::take(&mut self.line_vec)
     }
 }
