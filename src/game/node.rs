@@ -2,6 +2,8 @@ use super::writer::{Skip, Visitor};
 
 use crate::{Chess, Move, Position};
 
+use std::collections::HashSet;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -12,7 +14,7 @@ struct PrevInfo {
     node: Node,                       // parent node
     next_move: Move,                  // this node's previous move
     starting_comment: Option<String>, // Comment about starting a variation
-    nag_vec: Vec<u8>,                 // this node's nag attributes
+    nag_set: HashSet<u8>,             // this node's nag attributes
 }
 
 #[derive(Clone)]
@@ -50,7 +52,7 @@ impl Node {
                 node,
                 next_move: prev_move,
                 starting_comment: None,
-                nag_vec: Vec::new(),
+                nag_set: HashSet::new(),
             }),
             variation_vec: Vec::new(),
             comment: None,
@@ -67,6 +69,7 @@ impl Node {
     }
 }
 
+// Getter/Setter methods
 impl Node {
     pub fn id(&self) -> Uuid {
         self.id
@@ -78,6 +81,49 @@ impl Node {
 
     pub fn prev_move(&self) -> Option<Move> {
         Some(self.inner.borrow().prev.clone()?.next_move)
+    }
+
+    pub fn mainline(&self) -> Option<Node> {
+        self.inner.borrow().variation_vec.get(0).cloned()
+    }
+
+    pub fn variations(&self) -> Vec<Node> {
+        self.inner.borrow().variation_vec.clone()
+    }
+
+    pub fn new_variation(&mut self, m: Move) -> Node {
+        let next_node = Node::from_node(self.clone(), m);
+        self.inner
+            .borrow_mut()
+            .variation_vec
+            .push(next_node.clone());
+        next_node
+    }
+
+    pub fn remove_variation(&mut self, node: Node) -> bool {
+        let variations = &mut self.inner.borrow_mut().variation_vec;
+        let variations_size = variations.len();
+        variations.retain(|v| v.id != node.id);
+        variations.len() < variations_size
+    }
+
+    pub fn promote_variation(&mut self, node: Node) -> bool {
+        let variations = &mut self.inner.borrow_mut().variation_vec;
+        let variations_size = variations.len();
+        variations.retain(|v| v.id != node.id);
+        if variations.len() == variations_size {
+            // not its own children
+            println!(
+                "attempting to promote disconnected node {} in parent node {}",
+                node.id, self.id
+            );
+            return false;
+        }
+
+        // TODO: Use node directly from variation_vec
+        variations.insert(0, node);
+
+        true
     }
 
     pub fn starting_comment(&self) -> Option<String> {
@@ -92,7 +138,7 @@ impl Node {
 
     pub fn nags(&self) -> Vec<u8> {
         if let Some(prev) = &self.inner.borrow().prev {
-            return prev.nag_vec.clone();
+            return prev.nag_set.iter().copied().collect();
         }
 
         Vec::new()
@@ -100,12 +146,20 @@ impl Node {
 
     pub fn push_nag(&self, nag: u8) {
         if let Some(prev) = self.inner.borrow_mut().prev.as_mut() {
-            prev.nag_vec.push(nag);
+            prev.nag_set.insert(nag);
         }
     }
 
-    pub fn variations(&self) -> Vec<Node> {
-        self.inner.borrow().variation_vec.clone()
+    pub fn pop_nag(&self, nag: u8) {
+        if let Some(prev) = self.inner.borrow_mut().prev.as_mut() {
+            prev.nag_set.remove(&nag);
+        }
+    }
+
+    pub fn clear_nags(&self) {
+        if let Some(prev) = self.inner.borrow_mut().prev.as_mut() {
+            prev.nag_set.clear()
+        }
     }
 
     pub fn comment(&self) -> Option<String> {
@@ -115,11 +169,10 @@ impl Node {
     pub fn set_comment(&self, new_comment: Option<String>) {
         self.inner.borrow_mut().comment = new_comment;
     }
+}
 
-    pub fn mainline(&self) -> Option<Node> {
-        self.inner.borrow().variation_vec.get(0).cloned()
-    }
-
+// Methods that traverse the tree
+impl Node {
     // Find the root node by traversing up the tree
     #[allow(dead_code, unused_variables)]
     pub fn root(&self) -> Node {
@@ -170,17 +223,6 @@ impl Node {
         }
 
         board
-    }
-}
-
-impl Node {
-    pub fn new_variation(&mut self, m: Move) -> Node {
-        let next_node = Node::from_node(self.clone(), m);
-        self.inner
-            .borrow_mut()
-            .variation_vec
-            .push(next_node.clone());
-        next_node
     }
 }
 

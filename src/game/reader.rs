@@ -1,6 +1,6 @@
 use super::header::Header;
 use super::node::Node;
-use super::tree::GameTree;
+use super::Game;
 
 use crate::Chess;
 
@@ -47,7 +47,7 @@ impl GameVisitor {
 }
 
 impl pgn_reader::Visitor for GameVisitor {
-    type Result = GameTree;
+    type Result = Game;
 
     fn begin_game(&mut self) {
         let root = Node::new();
@@ -221,7 +221,7 @@ impl pgn_reader::Visitor for GameVisitor {
         let inner = if let Some(val) = self.try_get_inner() {
             val
         } else {
-            return GameTree::default();
+            return Game::default();
         };
 
         let header = inner.header.clone();
@@ -234,7 +234,7 @@ impl pgn_reader::Visitor for GameVisitor {
 
         *self = Self::None;
 
-        GameTree {
+        Game {
             header,
             opt_headers,
             initial_position,
@@ -246,7 +246,7 @@ impl pgn_reader::Visitor for GameVisitor {
     }
 }
 
-pub fn read_pgn(pgn: &str) -> std::io::Result<GameTree> {
+pub fn read_pgn(pgn: &str) -> std::io::Result<Game> {
     let mut reader = pgn_reader::BufferedReader::new_cursor(pgn);
 
     let mut visitor = GameVisitor::new();
