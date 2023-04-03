@@ -153,7 +153,10 @@ impl pgn_reader::Visitor for GameVisitor {
             return;
         };
 
-        let comment = std::str::from_utf8(comment.as_bytes()).unwrap().to_string();
+        let comment = std::str::from_utf8(comment.as_bytes())
+            .unwrap()
+            .trim()
+            .to_string();
 
         let cur_node = if let Some(val) = inner.variation_stack.last_mut() {
             val

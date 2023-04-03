@@ -152,8 +152,4 @@ fn node_promote() {
         game.promote_variation(promote_node_id),
         Some(promote_node_id)
     );
-
-    println!("----Begin PGN----");
-    println!("{:64}", game);
-    println!("----End PGN----");
 }
