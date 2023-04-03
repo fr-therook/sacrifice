@@ -1,10 +1,22 @@
 # sacrifice
 
-[![crates.io version](https://img.shields.io/crates/v/sacrifice?style=flat-square)](https://crates.io/crates/sacrifice)
-[![docs.rs version](https://img.shields.io/badge/docs.rs-sacrifice-green?style=flat-square)](https://docs.rs/sacrifice/)
+[
+  ![crates.io version](
+  https://img.shields.io/crates/v/sacrifice?color=red&logo=rust&label=crates.io%2Fsacrifice&style=flat-square
+  )
+](https://crates.io/crates/sacrifice)
+[
+  ![docs.rs version](
+  https://img.shields.io/crates/v/sacrifice?color=blue&logo=docs.rs&label=docs.rs%2Fsacrifice&style=flat-square
+  )
+](https://docs.rs/sacrifice/)
 
 A feature-rich chess library for Rust based on
-[shakmaty](https://docs.rs/shakmaty/latest/shakmaty/).
+[
+![crates.io version](
+https://img.shields.io/crates/v/shakmaty?color=red&logo=rust&label=%2Fshakmaty&style=flat-square
+)
+](https://crates.io/crates/shakmaty).
 
 ```sh
 $ cargo add sacrifice
