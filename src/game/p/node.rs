@@ -9,15 +9,17 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 struct PrevInfo {
-    node: Node,
-    // might be the root node
-    next_move: Move,
+    node: Node,                       // parent node
+    next_move: Move,                  // this node's previous move
+    starting_comment: Option<String>, // Comment about starting a variation
+    nag_vec: Vec<u8>,                 // this node's nag attributes
 }
 
 #[derive(Clone)]
 struct NodeImpl {
     prev: Option<PrevInfo>,
     variation_vec: Vec<Node>,
+    comment: Option<String>,
 }
 
 // A node in the game tree.
@@ -31,11 +33,13 @@ pub struct Node {
     id: Uuid,
 }
 
+// Constructors
 impl Node {
     pub fn new() -> Self {
         let inner = NodeImpl {
             prev: None,
             variation_vec: Vec::new(),
+            comment: None,
         };
         Self::from_inner(inner)
     }
@@ -45,15 +49,16 @@ impl Node {
             prev: Some(PrevInfo {
                 node,
                 next_move: prev_move,
+                starting_comment: None,
+                nag_vec: Vec::new(),
             }),
             variation_vec: Vec::new(),
+            comment: None,
         };
 
         Self::from_inner(inner)
     }
-}
 
-impl Node {
     fn from_inner(inner: NodeImpl) -> Self {
         let inner = Rc::new(RefCell::new(inner));
         let id = Uuid::new_v4();
@@ -75,8 +80,40 @@ impl Node {
         Some(self.inner.borrow().prev.clone()?.next_move)
     }
 
+    pub fn starting_comment(&self) -> Option<String> {
+        self.inner.borrow().prev.clone()?.starting_comment
+    }
+
+    pub fn set_starting_comment(&self, new_comment: Option<String>) {
+        if let Some(prev) = self.inner.borrow_mut().prev.as_mut() {
+            prev.starting_comment = new_comment;
+        }
+    }
+
+    pub fn nags(&self) -> Vec<u8> {
+        if let Some(prev) = &self.inner.borrow().prev {
+            return prev.nag_vec.clone();
+        }
+
+        Vec::new()
+    }
+
+    pub fn push_nag(&self, nag: u8) {
+        if let Some(prev) = self.inner.borrow_mut().prev.as_mut() {
+            prev.nag_vec.push(nag);
+        }
+    }
+
     pub fn variations(&self) -> Vec<Node> {
         self.inner.borrow().variation_vec.clone()
+    }
+
+    pub fn comment(&self) -> Option<String> {
+        self.inner.borrow().comment.clone()
+    }
+
+    pub fn set_comment(&self, new_comment: Option<String>) {
+        self.inner.borrow_mut().comment = new_comment;
     }
 
     pub fn mainline(&self) -> Option<Node> {
@@ -148,6 +185,23 @@ impl Node {
 }
 
 impl Node {
+    fn accept_inner<V: Visitor>(&self, prev_position: &Chess, visitor: &mut V) {
+        if let Some(starting_comment) = self.starting_comment() {
+            visitor.visit_comment(starting_comment);
+        }
+
+        // Visit the mainline node first
+        visitor.visit_move(prev_position.clone(), self.prev_move().unwrap());
+
+        for nag in self.nags() {
+            visitor.visit_nag(nag);
+        }
+
+        if let Some(comment) = self.comment() {
+            visitor.visit_comment(comment);
+        }
+    }
+
     pub fn accept<V: Visitor>(&self, initial_position: &Chess, visitor: &mut V) {
         // Return if there's no child nodes
         let main_node = if let Some(val) = self.mainline() {
@@ -156,8 +210,9 @@ impl Node {
             return;
         };
 
-        // Visit the mainline node first
-        visitor.visit_move(self.board(initial_position), main_node.prev_move().unwrap());
+        let prev_position = self.board(initial_position);
+
+        main_node.accept_inner(&prev_position, visitor);
 
         // Visit variation nodes after
         let mut variation_node_vec = self.inner.borrow().variation_vec.clone();
@@ -167,11 +222,7 @@ impl Node {
                 continue; // Skip this variation
             }
 
-            // Visit first move of this variation
-            visitor.visit_move(
-                self.board(initial_position),
-                variation_node.prev_move().unwrap(),
-            );
+            variation_node.accept_inner(&prev_position, visitor);
 
             // Recursively visiting variation node
             variation_node.accept(initial_position, visitor);

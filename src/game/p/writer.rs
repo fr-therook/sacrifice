@@ -12,9 +12,13 @@ pub trait Visitor {
     fn end_headers(&mut self);
 
     fn visit_move(&mut self, board: Chess, next_move: Move);
+    fn visit_comment(&mut self, comment: String);
+    fn visit_nag(&mut self, nag: u8);
 
     fn begin_variation(&mut self) -> Skip;
     fn end_variation(&mut self);
+
+    fn visit_result(&mut self, result: &str);
 
     fn end_game(&mut self) -> Self::Result;
 }
@@ -68,7 +72,9 @@ impl PgnWriter {
         let token = token.as_ref();
 
         if let Some(max_width) = self.max_width {
-            if max_width as usize - self.cur_line.len() < token.len() {
+            if ((max_width as usize) < self.cur_line.len())
+                || (max_width as usize - self.cur_line.len() < token.len())
+            {
                 self.flush();
             }
         }
@@ -118,6 +124,15 @@ impl Visitor for PgnWriter {
         self.force_move_number = false;
     }
 
+    fn visit_comment(&mut self, comment: String) {
+        self.write_token(format!("{{ {} }} ", comment.trim()));
+        self.force_move_number = true;
+    }
+
+    fn visit_nag(&mut self, nag: u8) {
+        self.write_token(format!("${} ", nag));
+    }
+
     fn begin_variation(&mut self) -> Skip {
         self.force_move_number = true;
         self.write_token("( ");
@@ -128,6 +143,10 @@ impl Visitor for PgnWriter {
     fn end_variation(&mut self) {
         self.force_move_number = true;
         self.write_token(") ");
+    }
+
+    fn visit_result(&mut self, result: &str) {
+        self.write_token(format!("{} ", result));
     }
 
     fn end_game(&mut self) -> Self::Result {

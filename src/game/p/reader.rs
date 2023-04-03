@@ -1,15 +1,18 @@
+use super::header::Header;
 use super::node::Node;
 use super::tree::GameTree;
 
 use crate::Chess;
 
+use pgn_reader::{Nag, RawComment};
 use std::collections::HashMap;
 
 use uuid::Uuid;
 
 // Predecessor of Game struct
 struct PartialGame {
-    headers: HashMap<String, String>,
+    header: Header,
+    opt_headers: HashMap<String, String>,
 
     initial_position: Chess,
 
@@ -19,6 +22,8 @@ struct PartialGame {
 
     variation_stack: Vec<Node>,
     in_variation: bool,
+
+    starting_comment: Option<String>,
 }
 
 enum GameVisitor {
@@ -52,7 +57,8 @@ impl pgn_reader::Visitor for GameVisitor {
         let variation_stack = vec![root.clone()];
 
         let inner = PartialGame {
-            headers: HashMap::new(),
+            header: Header::default(),
+            opt_headers: HashMap::new(),
             initial_position: Chess::new(),
 
             root,
@@ -61,6 +67,8 @@ impl pgn_reader::Visitor for GameVisitor {
 
             variation_stack,
             in_variation: false,
+
+            starting_comment: None,
         };
 
         *self = GameVisitor::InGame { inner }
@@ -73,11 +81,6 @@ impl pgn_reader::Visitor for GameVisitor {
             return;
         };
 
-        inner.headers.insert(
-            std::str::from_utf8(key).unwrap().to_string(),
-            std::str::from_utf8(value.as_bytes()).unwrap().to_string(),
-        );
-
         if key == b"FEN" {
             let pos = shakmaty::fen::Fen::from_ascii(value.as_bytes())
                 .ok()
@@ -86,6 +89,13 @@ impl pgn_reader::Visitor for GameVisitor {
             if let Some(pos) = pos {
                 inner.initial_position = pos;
             }
+        }
+
+        let key = std::str::from_utf8(key).unwrap();
+        let value = std::str::from_utf8(value.as_bytes()).unwrap();
+
+        if !inner.header.parse(key, value) {
+            inner.opt_headers.insert(key.to_string(), value.to_string());
         }
     }
 
@@ -112,10 +122,64 @@ impl pgn_reader::Visitor for GameVisitor {
 
         // A legal move
         let new_node = cur_node.new_variation(m);
+        new_node.set_starting_comment(inner.starting_comment.clone());
         inner.node_map.insert(new_node.id(), new_node.clone());
         *cur_node = new_node;
 
+        inner.starting_comment = None;
         inner.in_variation = true;
+    }
+
+    fn nag(&mut self, nag: Nag) {
+        let inner = if let Some(val) = self.try_get_inner() {
+            val
+        } else {
+            return;
+        };
+
+        let cur_node = if let Some(val) = inner.variation_stack.last_mut() {
+            val
+        } else {
+            return;
+        };
+
+        cur_node.push_nag(nag.0);
+    }
+
+    fn comment(&mut self, comment: RawComment<'_>) {
+        let inner = if let Some(val) = self.try_get_inner() {
+            val
+        } else {
+            return;
+        };
+
+        let comment = std::str::from_utf8(comment.as_bytes()).unwrap().to_string();
+
+        let cur_node = if let Some(val) = inner.variation_stack.last_mut() {
+            val
+        } else {
+            return;
+        };
+
+        if inner.in_variation // Regular comment
+            || (cur_node.parent().is_none() && cur_node.variations().is_empty())
+        {
+            // Comment is before any move
+            let new_comment = if let Some(val) = cur_node.comment() {
+                format!("{} {}", val, comment)
+            } else {
+                comment
+            };
+            cur_node.set_comment(Some(new_comment));
+            return;
+        }
+
+        let starting_comment = if let Some(val) = &inner.starting_comment {
+            format!("{} {}", val, comment)
+        } else {
+            comment
+        };
+        inner.starting_comment = Some(starting_comment);
     }
 
     fn begin_variation(&mut self) -> pgn_reader::Skip {
@@ -160,7 +224,8 @@ impl pgn_reader::Visitor for GameVisitor {
             return GameTree::default();
         };
 
-        let headers = inner.headers.clone();
+        let header = inner.header.clone();
+        let opt_headers = inner.opt_headers.clone();
         let initial_position = inner.initial_position.clone();
 
         let root = inner.root.clone();
@@ -170,7 +235,8 @@ impl pgn_reader::Visitor for GameVisitor {
         *self = Self::None;
 
         GameTree {
-            headers,
+            header,
+            opt_headers,
             initial_position,
 
             root,

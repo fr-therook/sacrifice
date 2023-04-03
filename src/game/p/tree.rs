@@ -1,3 +1,4 @@
+use super::header::Header;
 use super::node::Node;
 use super::reader::read_pgn;
 use super::writer::{PgnWriter, Visitor};
@@ -10,8 +11,9 @@ use uuid::Uuid;
 // A simple BTree data structure, plus header and initial position.
 // It also holds a hashmap for quick node lookup.
 pub struct GameTree {
-    pub headers: HashMap<String, String>,
+    pub header: Header,
     pub initial_position: Chess,
+    pub opt_headers: HashMap<String, String>,
 
     pub root: Node,
 
@@ -20,7 +22,8 @@ pub struct GameTree {
 
 impl Default for GameTree {
     fn default() -> Self {
-        let headers = HashMap::new();
+        let header = Header::default();
+        let opt_headers = HashMap::new();
         let initial_position = Chess::default();
 
         let root = Node::new();
@@ -28,7 +31,8 @@ impl Default for GameTree {
         let node_map = HashMap::new();
 
         Self {
-            headers,
+            header,
+            opt_headers,
             initial_position,
 
             root,
@@ -105,12 +109,24 @@ impl GameTree {
         visitor.begin_game();
 
         visitor.begin_headers();
-        for (key, value) in &self.headers {
-            visitor.visit_header(key, value);
+        {
+            self.header.accept(visitor);
+
+            for (key, value) in &self.opt_headers {
+                visitor.visit_header(key, value);
+            }
         }
         visitor.end_headers();
 
+        if let Some(comment) = self.root.comment() {
+            // Game comment
+            visitor.visit_comment(comment);
+        }
+
         self.root.accept(&self.initial_position, visitor);
+
+        let result = self.header.result.to_string();
+        visitor.visit_result(result.as_str());
 
         visitor.end_game()
     }
