@@ -35,11 +35,11 @@ println!("{}", game);
 
 // What if someone want to play 1. d4?
 let queens_pawn = sacrifice::Move::Normal {
-role: sacrifice::Role::Pawn,
-from: sacrifice::Square::D2,
-capture: None,
-to: sacrifice::Square::D4,
-promotion: None,
+  role: sacrifice::Role::Pawn,
+  from: sacrifice::Square::D2,
+  capture: None,
+  to: sacrifice::Square::D4,
+  promotion: None,
 };
 let new_node = game.add_node(game.root(), queens_pawn);
 println!("{}", game); // 1. e4 (1. d4) 1... c5
