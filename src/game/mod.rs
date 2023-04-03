@@ -37,8 +37,9 @@ use crate::{Chess, Move, Position};
 /// ```
 pub struct Game {
     header: Header,
-    initial_position: Chess,
     opt_headers: HashMap<String, String>,
+
+    initial_position: Chess,
 
     root: Node,
 
