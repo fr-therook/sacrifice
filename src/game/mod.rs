@@ -4,16 +4,16 @@ mod node;
 mod reader;
 mod writer;
 
-use node::Node;
+#[cfg(test)]
+mod tests;
 
 use header::Header;
-use reader::read_pgn;
+use node::Node;
 
-use shakmaty::Position;
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
-use crate::{Chess, Move};
+use crate::{Chess, Move, Position};
 
 /// A chess game with possible variations.
 ///
@@ -27,12 +27,12 @@ use crate::{Chess, Move};
 /// let open_sicilian = sacrifice::Move::Normal {
 ///    role: sacrifice::Role::Knight,
 ///    from: sacrifice::Square::G1,
-///    capture: None,
 ///    to: sacrifice::Square::F3,
+///    capture: None,
 ///    promotion: None,
 /// };
 /// // Play the Open Sicilian
-/// assert_ne!(game.add_node(game.root(), open_sicilian), None);
+/// assert!(game.add_node(game.root(), open_sicilian).is_some());
 /// println!("{}", game); // prints the PGN of the default position
 /// ```
 pub struct Game {
@@ -89,14 +89,16 @@ impl Game {
     /// println!("{}", game); // Exports the game's PGN with default headers
     /// ```
     pub fn from_pgn(pgn_str: &str) -> Self {
-        read_pgn(pgn_str).unwrap()
+        reader::read_pgn(pgn_str).unwrap()
     }
 }
 
 // Accessing/manipulating a single node.
 impl Game {
     fn try_node(&self, id: Uuid) -> Option<Node> {
-        self.node_map.get(&id).cloned()
+        let node = self.node_map.get(&id)?.clone();
+        assert_eq!(node.id(), id, "id-node hashmap outdated");
+        Some(node)
     }
 
     /// Returns the id of the root node.
@@ -107,7 +109,7 @@ impl Game {
     /// ```
     /// let game = sacrifice::Game::from_pgn("1. e4 e5");
     /// let root_node = game.root();
-    /// assert_ne!(game.exists(root_node), None);
+    /// assert!(game.exists(root_node).is_some());
     /// ```
     pub fn root(&self) -> Uuid {
         self.root.id()
@@ -126,11 +128,11 @@ impl Game {
     /// ```
     /// let game = sacrifice::Game::default();
     /// let random_node = uuid::Uuid::new_v4();
-    /// assert_eq!(game.exists(random_node), None);
+    /// // Improbable for a random Uuid to correspond to a valid node
+    /// assert!(game.exists(random_node).is_none());
     /// ```
     pub fn exists(&self, node_id: Uuid) -> Option<Uuid> {
         let node = self.try_node(node_id)?;
-        assert_eq!(node.id(), node_id, "id-node hashmap outdated");
         Some(node.id())
     }
 
@@ -145,9 +147,12 @@ impl Game {
     /// ```
     /// let game = sacrifice::Game::from_pgn("1. e4 e5");
     /// let root_node = game.root();
-    /// assert_eq!(game.parent(root_node), None); // root node needs no parent
+    /// assert!(game.parent(root_node).is_none()); // root node needs no parent
     /// let mainline_node_1 = game.mainline(root_node).unwrap(); // 1. e4 node
-    /// assert_eq!(game.parent(mainline_node_1).unwrap(), root_node);
+    /// assert_eq!(
+    ///   game.parent(mainline_node_1),
+    ///   Some(root_node)
+    /// );
     /// ```
     pub fn parent(&self, node_id: Uuid) -> Option<Uuid> {
         let node = self.try_node(node_id)?;
@@ -186,7 +191,7 @@ impl Game {
     /// ```
     /// let game = sacrifice::Game::from_pgn("1. e4 e5");
     /// let mainline_node_1 = game.mainline(game.root()); // 1. e4 node
-    /// assert_ne!(mainline_node_1, None); // It exists
+    /// assert!(mainline_node_1.is_some()); // It exists
     /// ```
     pub fn mainline(&self, node_id: Uuid) -> Option<Uuid> {
         let node = self.try_node(node_id)?;
@@ -233,9 +238,14 @@ impl Game {
     /// # Examples
     ///
     /// ```
-    /// let game = sacrifice::Game::from_pgn("1. e4 ({Ok} 1. d4) 1... e5");
+    /// let ok_str = "Ok";
+    /// let pgn_str = format!("1. e4 ({{ {} }} 1. d4) 1... e5", ok_str);
+    /// let game = sacrifice::Game::from_pgn(pgn_str.as_str());
     /// let variation_node_1_0 = game.other_variations(game.root())[0]; // {Ok} 1. d4
-    /// assert_eq!(game.starting_comment(variation_node_1_0), Some("Ok".to_string()));
+    /// assert_eq!(
+    ///   game.starting_comment(variation_node_1_0),
+    ///   Some(ok_str.to_string())
+    /// );
     /// ```
     pub fn starting_comment(&self, node_id: Uuid) -> Option<String> {
         let node = self.try_node(node_id)?;
@@ -254,9 +264,12 @@ impl Game {
     /// ```
     /// let game = sacrifice::Game::from_pgn("1. e4 (1. d4) 1... e5");
     /// let variation_node_1_0 = game.other_variations(game.root())[0]; // {Ok} 1. d4
-    /// assert!(game.starting_comment(variation_node_1_0).is_none());
+    /// assert!(game.starting_comment(variation_node_1_0).is_none()); // 1... e5
     /// game.set_starting_comment(variation_node_1_0, Some("Ok".to_string()));
-    /// assert_eq!(game.starting_comment(variation_node_1_0), Some("Ok".to_string()));
+    /// assert_eq!(
+    ///   game.starting_comment(variation_node_1_0),
+    ///   Some("Ok".to_string())
+    /// );
     /// ```
     pub fn set_starting_comment(&self, node_id: Uuid, new_comment: Option<String>) {
         if let Some(node) = self.try_node(node_id) {
@@ -277,7 +290,7 @@ impl Game {
     /// let mainline_node_1 = game.mainline(game.root()).unwrap(); // [1. e4??]
     /// assert_eq!(game.nags(mainline_node_1), vec![4]); // ?? -> $4
     /// let mainline_node_2 = game.mainline(mainline_node_1).unwrap(); // [1... c5!]
-    /// assert_eq!(game.nags(mainline_node_2), vec![1]); // ?? -> $4
+    /// assert_eq!(game.nags(mainline_node_2), vec![1]); // ! -> $1
     /// ```
     pub fn nags(&self, node_id: Uuid) -> Vec<u8> {
         if let Some(node) = self.try_node(node_id) {
@@ -322,11 +335,13 @@ impl Game {
     /// # Examples
     ///
     /// ```
-    /// let game = sacrifice::Game::from_pgn("1. e4 { This blunders into the Sicilian Defense }  1... e5");
+    /// let e4_comment_str = "this blunders into the Sicilian Defense";
+    /// let pgn_str = format!("1. e4 {{ {} }}  1... c5", e4_comment_str);
+    /// let game = sacrifice::Game::from_pgn(pgn_str.as_str());
     /// let mainline_node_1 = game.mainline(game.root()).unwrap(); // 1. e4
     /// assert_eq!(
     ///   game.comment(mainline_node_1),
-    ///   Some("This blunders into the Sicilian Defense".to_string())
+    ///   Some(e4_comment_str.to_string())
     /// );
     /// ```
     pub fn comment(&self, node_id: Uuid) -> Option<String> {
@@ -344,16 +359,19 @@ impl Game {
     /// # Examples
     ///
     /// ```
-    /// let game = sacrifice::Game::from_pgn("1. e4 { This blunders into the Sicilian Defense }  1... e5");
+    /// let e4_comment_str = "this blunders into the Sicilian Defense";
+    /// let pgn_str = format!("1. e4 {{ {} }}  1... c5", e4_comment_str);
+    /// let game = sacrifice::Game::from_pgn(pgn_str.as_str());
     /// let mainline_node_1 = game.mainline(game.root()).unwrap(); // 1. e4
     /// assert_eq!(
     ///   game.comment(mainline_node_1),
-    ///   Some("This blunders into the Sicilian Defense".to_string())
+    ///   Some(e4_comment_str.to_string())
     /// );
-    /// game.set_comment(mainline_node_1, Some("best by test".to_string()));
+    /// let e4_comment_alt_str = "best by test";
+    /// game.set_comment(mainline_node_1, Some(e4_comment_alt_str.to_string()));
     /// assert_eq!(
     ///   game.comment(mainline_node_1),
-    ///   Some("best by test".to_string()) // it just is
+    ///   Some(e4_comment_alt_str.to_string()) // it just is
     /// );
     /// ```
     pub fn set_comment(&self, node_id: Uuid, new_comment: Option<String>) {
@@ -378,7 +396,10 @@ impl Game {
     /// let mainline_node_2 = game.mainline(mainline_node_1).unwrap(); // 1... c5
     /// let fen: sacrifice::Fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2".parse().unwrap();
     /// let actual_position: sacrifice::Chess = fen.clone().into_position(sacrifice::CastlingMode::Standard).unwrap();
-    /// assert_eq!(game.board_at(mainline_node_2).unwrap(), actual_position)
+    /// assert_eq!(
+    ///   game.board_at(mainline_node_2),
+    ///   Some(actual_position)
+    /// )
     /// ```
     pub fn board_at(&self, node_id: Uuid) -> Option<Chess> {
         let node = self.try_node(node_id)?;
@@ -423,8 +444,14 @@ impl Game {
     /// ```
     /// let mut game = sacrifice::Game::from_pgn("1. d4 (1. e4) 1... d5");
     /// let variation_node_1_0 = game.other_variations(game.root())[0]; // (1. e4)
-    /// assert_eq!(game.promote_variation(variation_node_1_0), Some(variation_node_1_0)); // Now mainline
-    /// assert_eq!(game.mainline(game.root()), Some(variation_node_1_0));
+    /// assert_eq!(
+    ///   game.promote_variation(variation_node_1_0), // promote 1. e4 to mainline
+    ///   Some(variation_node_1_0)
+    /// );
+    /// assert_eq!(
+    ///   game.mainline(game.root()),
+    ///   Some(variation_node_1_0)
+    /// );
     /// ```
     pub fn promote_variation(&mut self, node_id: Uuid) -> Option<Uuid> {
         let node = self.try_node(node_id)?;
@@ -465,21 +492,24 @@ impl Game {
     /// let illegal_move = sacrifice::Move::Normal {
     ///    role: sacrifice::Role::Queen,
     ///    from: sacrifice::Square::D8,
-    ///    capture: None,
     ///    to: sacrifice::Square::H4,
+    ///    capture: None,
     ///    promotion: None,
     /// };
-    /// assert_eq!(game.add_node(mainline_node_1, illegal_move), None);
+    /// assert!(game.add_node(mainline_node_1, illegal_move).is_none());
     /// let legal_move = sacrifice::Move::Normal {
     ///    role: sacrifice::Role::Pawn,
     ///    from: sacrifice::Square::E7,
-    ///    capture: None,
     ///    to: sacrifice::Square::E5,
+    ///    capture: None,
     ///    promotion: None,
     /// };
     /// let new_node = game.add_node(mainline_node_1, legal_move);
-    /// assert_ne!(new_node, None);
-    /// assert_eq!(game.mainline(mainline_node_1).unwrap(), new_node.unwrap());
+    /// assert!(new_node.is_some());
+    /// assert_eq!(
+    ///   game.mainline(mainline_node_1).unwrap(),
+    ///   new_node.unwrap()
+    /// );
     /// ```
     pub fn add_node(&mut self, parent_id: Uuid, m: Move) -> Option<Uuid> {
         let mut parent = self.try_node(parent_id)?;
@@ -508,8 +538,8 @@ impl Game {
     /// ```
     /// let mut game = sacrifice::Game::from_pgn("1. d4");
     /// let mainline_node_1 = game.mainline(game.root()).unwrap();
-    /// assert_ne!(game.remove_node(mainline_node_1), None); // No child nodes left
-    /// assert_eq!(game.mainline(game.root()), None);
+    /// assert!(game.remove_node(mainline_node_1).is_some()); // No child nodes left
+    /// assert!(game.mainline(game.root()).is_none());
     /// ```
     pub fn remove_node(&mut self, node_id: Uuid) -> Option<Uuid> {
         let node = self.try_node(node_id)?;
@@ -596,6 +626,3 @@ impl Game {
         visitor.end_game()
     }
 }
-
-#[cfg(test)]
-mod tests;

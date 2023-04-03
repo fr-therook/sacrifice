@@ -150,12 +150,6 @@ impl Node {
         }
     }
 
-    pub fn pop_nag(&self, nag: u8) {
-        if let Some(prev) = self.inner.borrow_mut().prev.as_mut() {
-            prev.nag_set.remove(&nag);
-        }
-    }
-
     pub fn clear_nags(&self) {
         if let Some(prev) = self.inner.borrow_mut().prev.as_mut() {
             prev.nag_set.clear()

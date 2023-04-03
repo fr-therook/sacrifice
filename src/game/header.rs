@@ -1,5 +1,4 @@
 use super::writer::Visitor;
-use std::fmt::Formatter;
 
 #[derive(Clone)]
 pub enum GameResult {
@@ -37,7 +36,7 @@ impl From<&str> for GameResult {
 }
 
 impl std::fmt::Display for GameResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GameResult::Finished {
                 white_score,
