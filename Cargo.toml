@@ -1,7 +1,7 @@
 [package]
 name = "sacrifice"
 description = "A feature-rich chess library for Rust"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 
 repository = "https://github.com/fr-therook/sacrifice"
