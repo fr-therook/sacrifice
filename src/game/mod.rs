@@ -15,8 +15,9 @@ use uuid::Uuid;
 
 use crate::{Chess, Move};
 
-/// This structure represents a chess game with possible variations.
-/// A simple BTree data structure, plus header and initial position.
+/// A chess game with possible variations.
+///
+/// It contains a simple BTree, plus header and initial position.
 /// It also holds a hashmap for quick node lookup.
 ///
 /// # Examples
@@ -113,6 +114,7 @@ impl Game {
     }
 
     /// Check if given node id corresponds to a valid node in the game tree.
+    ///
     /// Returns `Some(node_id)` if found.
     ///
     /// # Arguments
@@ -192,6 +194,7 @@ impl Game {
     }
 
     /// Returns variations (excluding mainline) of the given node.
+    ///
     /// Returns an empty array if no other variation exists.
     ///
     /// # Arguments
@@ -360,6 +363,7 @@ impl Game {
     }
 
     /// Returns the board position at a given node.
+    ///
     /// Returns `None` if given node cannot be found in the tree.
     ///
     /// # Arguments
@@ -445,6 +449,7 @@ impl Game {
 // Methods that manipulate the node tree and node map
 impl Game {
     /// Add a move to a given node in the game tree.
+    ///
     /// Returns `None` if the move is illegal, or if given node is not found in the tree.
     ///
     /// # Arguments
@@ -491,6 +496,7 @@ impl Game {
     }
 
     /// Remove all occurrences of the given node from the game tree.
+    ///
     /// Returns the given node's id if successful.
     ///
     /// # Arguments
