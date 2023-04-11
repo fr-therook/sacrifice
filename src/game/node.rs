@@ -91,6 +91,18 @@ impl Node {
         self.inner.borrow().variation_vec.clone()
     }
 
+    pub fn siblings(&self) -> Vec<Node> {
+        let parent = if let Some(val) = self.parent() {
+            val
+        } else {
+            return Vec::new();
+        };
+
+        let mut variation_vec = parent.variations();
+        variation_vec.retain(|val| val.id != self.id);
+        variation_vec
+    }
+
     pub fn new_variation(&mut self, m: Move) -> Node {
         let next_node = Node::from_node(self.clone(), m);
         self.inner

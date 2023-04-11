@@ -233,6 +233,34 @@ impl Game {
         variations
     }
 
+    /// Returns siblings (other variations of the parent node) of the given node.
+    ///
+    /// Returns an empty array if no siblings exists.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - id of the given node
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let game = sacrifice::Game::from_pgn("1. e4 (1. d4) 1... e5");
+    /// let e4_node = game.mainline(game.root()).expect("e4 node should exist");
+    /// let e4_siblings = game.siblings(e4_node);
+    /// assert!(!e4_siblings.is_empty()); // It exists
+    /// ```
+    pub fn siblings(&self, node_id: Uuid) -> Vec<Uuid> {
+        let node = if let Some(val) = self.try_node(node_id) {
+            val
+        } else {
+            return vec![];
+        };
+        node.siblings()
+            .into_iter()
+            .map(|val| val.id())
+            .collect::<Vec<Uuid>>()
+    }
+
     /// Returns the starting comment (comment that starts a variation)
     /// of the given node.
     ///
