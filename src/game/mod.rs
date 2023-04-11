@@ -225,6 +225,10 @@ impl Game {
             .into_iter()
             .map(|val| val.id())
             .collect::<Vec<Uuid>>();
+        if variations.is_empty() {
+            return Vec::new();
+        }
+
         variations.remove(0);
         variations
     }
