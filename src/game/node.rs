@@ -218,6 +218,18 @@ impl Node {
 
         board
     }
+
+    pub fn board_before(&self, initial_position: &Chess) -> Chess {
+        let mut board = initial_position.clone();
+
+        let mut move_vec = self.moves();
+        move_vec.pop(); // Remove latest move
+        for _move in move_vec {
+            board.play_unchecked(&_move);
+        }
+
+        board
+    }
 }
 
 impl Node {

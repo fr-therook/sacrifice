@@ -407,6 +407,32 @@ impl Game {
         Some(node.board(&self.initial_position))
     }
 
+    /// Returns the board position before a given node.
+    ///
+    /// Returns `None` if given node cannot be found in the tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - id of the given node
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let game = sacrifice::Game::from_pgn("1. e4 c5");
+    /// let mainline_node_1 = game.mainline(game.root()).unwrap(); // 1. e4
+    /// let mainline_node_2 = game.mainline(mainline_node_1).unwrap(); // 1... c5
+    /// let fen: sacrifice::Fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1".parse().unwrap();
+    /// let actual_position: sacrifice::Chess = fen.clone().into_position(sacrifice::CastlingMode::Standard).unwrap();
+    /// assert_eq!(
+    ///   game.board_before(mainline_node_2),
+    ///   Some(actual_position)
+    /// )
+    /// ```
+    pub fn board_before(&self, node_id: Uuid) -> Option<Chess> {
+        let node = self.try_node(node_id)?;
+        Some(node.board_before(&self.initial_position))
+    }
+
     /// Returns the array of moves that leads to the given node.
     ///
     /// # Arguments
