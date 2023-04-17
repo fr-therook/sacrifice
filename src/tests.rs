@@ -1,6 +1,3 @@
-use super::Game;
-use crate::{Move, Role, Square};
-
 const GAME_0: &str = r#"
 [Event "Casual Rapid game"]
 [Site "https://lichess.org/5uSupub7"]
@@ -42,7 +39,7 @@ Kg1 g3 46. Kh1 g2+ 47. Kg1 h2+ 48. Kxh2 Kf2 49. Kh3 g1=Q 50. Kh4 Kf3 51. Kh5 Kf4
 
 #[test]
 fn pgn() {
-    let game = Game::from_pgn(GAME_0);
+    let game = crate::read_pgn(GAME_0);
     println!("----Begin PGN----");
     println!("{:64}", game);
     println!("----End PGN----");
