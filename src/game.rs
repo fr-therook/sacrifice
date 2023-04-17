@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use crate::{Move, Chess};
+use crate::{Chess, Move};
 
 /// A chess game with possible variations.
 pub trait Game<N: Node>: Default + std::fmt::Display {

@@ -1,4 +1,5 @@
 use super::writer::Visitor;
+use crate::writer::PartialAcceptor;
 
 #[derive(Clone)]
 pub enum GameResult {
@@ -108,8 +109,10 @@ impl Header {
 
         true
     }
+}
 
-    pub fn accept<V: Visitor>(&self, visitor: &mut V) {
+impl PartialAcceptor for Header {
+    fn accept<V: Visitor>(&self, visitor: &mut V) {
         visitor.visit_header("Event", &serialize_header_value(&self.event, "?"));
         visitor.visit_header("Site", &serialize_header_value(&self.site, "?"));
         visitor.visit_header("Date", &serialize_header_value(&self.date, "????.??.??"));

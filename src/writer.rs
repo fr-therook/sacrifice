@@ -1,4 +1,71 @@
+use crate::prelude::*;
 use crate::{Chess, Color, Move, Position};
+
+pub(crate) trait PartialAcceptor {
+    fn accept<V: Visitor>(&self, visitor: &mut V);
+}
+
+pub(crate) trait FullAcceptor {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Result;
+}
+
+pub(crate) trait NodeAcceptor: Node {
+    fn accept_inner<V: Visitor>(&self, prev_position: &Chess, visitor: &mut V);
+    fn accept<V: Visitor>(&self, initial_position: &Chess, visitor: &mut V);
+}
+
+impl<N: Node> NodeAcceptor for N {
+    fn accept_inner<V: Visitor>(&self, prev_position: &Chess, visitor: &mut V) {
+        if let Some(starting_comment) = self.starting_comment() {
+            visitor.visit_comment(starting_comment);
+        }
+
+        // Visit the mainline node first
+        visitor.visit_move(prev_position.clone(), self.prev_move().unwrap());
+
+        if let Some(nags) = self.nags() {
+            for nag in nags {
+                visitor.visit_nag(nag);
+            }
+        }
+
+        if let Some(comment) = self.comment() {
+            visitor.visit_comment(comment);
+        }
+    }
+
+    fn accept<V: Visitor>(&self, initial_position: &Chess, visitor: &mut V) {
+        // Return if there's no child nodes
+        let main_node = if let Some(val) = self.mainline() {
+            val
+        } else {
+            return;
+        };
+
+        let prev_position = self.board(initial_position);
+
+        main_node.accept_inner(&prev_position, visitor);
+
+        // Visit variation nodes after
+        let mut variation_node_vec = self.variation_vec();
+        variation_node_vec.remove(0);
+        for variation_node in variation_node_vec {
+            if let Skip(true) = visitor.begin_variation() {
+                continue; // Skip this variation
+            }
+
+            variation_node.accept_inner(&prev_position, visitor);
+
+            // Recursively visiting variation node
+            variation_node.accept(initial_position, visitor);
+
+            visitor.end_variation();
+        }
+
+        // Visit mainline recursively last
+        main_node.accept(initial_position, visitor);
+    }
+}
 
 pub struct Skip(pub bool);
 

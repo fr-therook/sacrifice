@@ -1,10 +1,10 @@
 use crate::prelude::*;
-use crate::node::NodeAcceptorExt;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use crate::header::Header;
-use crate::{reader, writer, reader::NodeBuilder, reader::VisitedGame};
+use crate::writer::{FullAcceptor, NodeAcceptor, PartialAcceptor};
+use crate::{reader, reader::NodeBuilder, reader::VisitedGame, writer};
 use crate::{Chess, Move, Position};
 
 use super::NodeImpl;
@@ -102,9 +102,7 @@ impl Game<NodeImpl> for GameImpl {
         let mut parent = if let Some(val) = node.parent() {
             val
         } else {
-            println!(
-                "node has no parent - attempting to delete root node?"
-            );
+            println!("node has no parent - attempting to delete root node?");
             return None;
         };
 
@@ -126,9 +124,7 @@ impl Game<NodeImpl> for GameImpl {
         }
 
         // How did we get here?
-        println!(
-            "node has parent, yet is not its child",
-        );
+        println!("node has parent, yet is not its child",);
 
         None
     }
@@ -152,7 +148,7 @@ impl std::fmt::Display for GameImpl {
     }
 }
 
-impl GameImpl {
+impl FullAcceptor for GameImpl {
     fn accept<V: writer::Visitor>(&self, visitor: &mut V) -> V::Result {
         visitor.begin_game();
 

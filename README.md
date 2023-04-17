@@ -25,8 +25,10 @@ $ cargo add sacrifice
 ## Example
 
 ```rust
+use sacrifice::prelude::*;
+
 fn main() {
-    let mut game = sacrifice::Game::from_pgn(
+    let mut game = sacrifice::read_pgn(
         "1. e4 { this blunders into the Sicilian Defense }  1... c5"
     );
     println!("{}", game); // exports the PGN string
@@ -56,10 +58,6 @@ fn main() {
     };
     let new_node = game.add_node(game.root(), queens_pawn); // 1. d4 node
     println!("{}", game); // 1. e4 (1. d4) 1... c5
-
-    // Promote 1. d4
-    game.promote_variation(new_node);
-    println!("{}", game); // 1. d4 (1. e4 c5)
 }
 ```
 

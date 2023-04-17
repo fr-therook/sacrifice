@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 struct PrevInfo {
-    node: NodeImpl,                       // parent node
+    node: NodeImpl,                   // parent node
     next_move: Move,                  // this node's previous move
     starting_comment: Option<String>, // Comment about starting a variation
     nag_set: HashSet<u8>,             // this node's nag attributes
@@ -72,7 +72,10 @@ impl Node for NodeImpl {
     }
 
     fn set_variation_vec(&mut self, new_variation_vec: Vec<Self>) -> Vec<Self> {
-        std::mem::replace(&mut self.inner.borrow_mut().variation_vec, new_variation_vec)
+        std::mem::replace(
+            &mut self.inner.borrow_mut().variation_vec,
+            new_variation_vec,
+        )
     }
 
     fn starting_comment(&self) -> Option<String> {
