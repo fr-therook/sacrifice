@@ -3,17 +3,8 @@ pub use shakmaty::{san::San, san::SanPlus};
 pub use shakmaty::{Chess, Position};
 pub use shakmaty::{Color, File, Move, Piece, Rank, Role, Square};
 
-pub mod prelude;
-
-mod game;
-mod node;
-
-mod header;
-
-mod reader;
-mod writer;
-
-mod p;
+pub mod game;
+mod pgn;
 
 #[cfg(test)]
 mod tests;
@@ -27,13 +18,9 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use sacrifice::prelude::*;
-///
 /// let game = sacrifice::read_pgn("1. e4 e5");
 /// println!("{}", game); // Exports the game's PGN with default headers
 /// ```
-pub fn read_pgn(pgn: &str) -> p::GameImpl {
-    use crate::game::Game;
-
-    p::GameImpl::from_pgn(pgn)
+pub fn read_pgn(pgn: &str) -> game::Game {
+    pgn::reader::read_pgn(pgn).unwrap()
 }

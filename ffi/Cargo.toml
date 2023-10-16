@@ -1,0 +1,18 @@
+[package]
+name = "sacrifice-ffi"
+description = "FFI bindings for sacrifice"
+
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+cxx = "1.0"
+
+sac = { package = "sacrifice", path = "../" }
+
+[build-dependencies]
+cxx-build = "1.0"

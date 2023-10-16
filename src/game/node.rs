@@ -1,11 +1,52 @@
 use crate::{Chess, Move, Position};
+
 use std::collections::HashSet;
 
-pub trait Node: Sized + Clone + PartialEq + Default {
-    // Constructors
-    fn from_node(parent: Self, m: Move) -> Self;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-    // Required properties
+#[derive(Debug, Clone)]
+struct PrevInfo {
+    node: Node,                       // parent node
+    next_move: Move,                  // this node's previous move
+    starting_comment: Option<String>, // Comment about starting a variation
+    nag_set: HashSet<u8>,             // this node's nag attributes
+}
+
+#[derive(Debug, Clone, Default)]
+struct NodeInner {
+    prev: Option<PrevInfo>,
+    variation_vec: Vec<Node>,
+    comment: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Node {
+    inner: Rc<RefCell<NodeInner>>,
+}
+
+impl PartialEq<Self> for Node {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl Node {
+    pub fn from_node(parent: Self, m: Move) -> Self {
+        let inner = NodeInner {
+            prev: Some(PrevInfo {
+                node: parent,
+                next_move: m,
+                starting_comment: None,
+                nag_set: HashSet::new(),
+            }),
+            variation_vec: Vec::new(),
+            comment: None,
+        };
+        let inner = Rc::new(RefCell::new(inner));
+
+        Self { inner }
+    }
 
     /// Returns the parent node of the given node.
     ///
@@ -16,8 +57,6 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let game = sacrifice::read_pgn("1. e4 e5");
     /// let root = game.root();
     /// assert!(root.parent().is_none()); // root node needs no parent
@@ -27,7 +66,9 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     ///   Some(root)
     /// );
     /// ```
-    fn parent(&self) -> Option<Self>;
+    pub fn parent(&self) -> Option<Self> {
+        Some(self.inner.borrow().prev.clone()?.node)
+    }
 
     /// Returns the move that leads to the given node.
     ///
@@ -38,8 +79,6 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let game = sacrifice::read_pgn("1. e4 e5");
     /// let mainline_node_1 = game.root().mainline().unwrap(); // 1. e4 node
     /// assert_eq!(
@@ -47,10 +86,20 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     ///   sacrifice::Square::E4
     /// );
     /// ```
-    fn prev_move(&self) -> Option<Move>;
+    pub fn prev_move(&self) -> Option<Move> {
+        Some(self.inner.borrow().prev.clone()?.next_move)
+    }
 
-    fn variation_vec(&self) -> Vec<Self>;
-    fn set_variation_vec(&mut self, new_variation_vec: Vec<Self>) -> Vec<Self>;
+    pub fn variation_vec(&self) -> Vec<Self> {
+        self.inner.borrow().variation_vec.clone()
+    }
+
+    pub fn set_variation_vec(&mut self, new_variation_vec: Vec<Self>) -> Vec<Self> {
+        std::mem::replace(
+            &mut self.inner.borrow_mut().variation_vec,
+            new_variation_vec,
+        )
+    }
 
     /// Returns the starting comment (comment that starts a variation)
     /// of the given node.
@@ -62,8 +111,6 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let ok_str = "Ok";
     /// let pgn_str = format!("1. e4 ({{ {} }} 1. d4) 1... e5", ok_str);
     /// let game = sacrifice::read_pgn(pgn_str.as_str());
@@ -73,7 +120,9 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     ///   Some(ok_str.to_string())
     /// );
     /// ```
-    fn starting_comment(&self) -> Option<String>;
+    pub fn starting_comment(&self) -> Option<String> {
+        self.inner.borrow().prev.clone()?.starting_comment
+    }
 
     /// Sets the starting comment of the given node.
     ///
@@ -85,8 +134,6 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let game = sacrifice::read_pgn("1. e4 (1. d4) 1... e5");
     /// let mut variation_node_1_0 = game.root().other_variations()[0].clone(); // {Ok} 1. d4
     /// assert!(variation_node_1_0.starting_comment().is_none()); // 1... e5
@@ -96,7 +143,13 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     ///   Some("Ok".to_string())
     /// );
     /// ```
-    fn set_starting_comment(&mut self, new_comment: Option<String>) -> Option<String>;
+    pub fn set_starting_comment(&mut self, new_comment: Option<String>) -> Option<String> {
+        if let Some(ref mut prev) = self.inner.borrow_mut().prev {
+            return std::mem::replace(&mut prev.starting_comment, new_comment);
+        }
+
+        None
+    }
 
     /// Returns the NAGs of the given node.
     ///
@@ -107,16 +160,27 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let game = sacrifice::read_pgn("1. e4?? c5!");
     /// let mainline_node_1 = game.root().mainline().unwrap(); // [1. e4??]
     /// assert!(mainline_node_1.nags().unwrap().contains(&4)); // ?? -> $4
     /// let mainline_node_2 = mainline_node_1.mainline().unwrap(); // [1... c5!]
     /// assert!(mainline_node_2.nags().unwrap().contains(&1)); // ! -> $1
     /// ```
-    fn nags(&self) -> Option<HashSet<u8>>;
-    fn set_nags(&mut self, new_nags: HashSet<u8>) -> Option<HashSet<u8>>;
+    pub fn nags(&self) -> Option<HashSet<u8>> {
+        if let Some(ref prev) = self.inner.borrow().prev {
+            return Some(prev.nag_set.iter().copied().collect());
+        }
+
+        None
+    }
+
+    pub fn set_nags(&mut self, new_nags: HashSet<u8>) -> Option<HashSet<u8>> {
+        if let Some(ref mut prev) = self.inner.borrow_mut().prev {
+            return Some(std::mem::replace(&mut prev.nag_set, new_nags));
+        }
+
+        None
+    }
 
     /// Returns the comment on a given node.
     ///
@@ -127,8 +191,6 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let e4_comment_str = "this blunders into the Sicilian Defense";
     /// let pgn_str = format!("1. e4 {{ {} }}  1... c5", e4_comment_str);
     /// let game = sacrifice::read_pgn(pgn_str.as_str());
@@ -138,7 +200,9 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     ///   Some(e4_comment_str.to_string())
     /// );
     /// ```
-    fn comment(&self) -> Option<String>;
+    pub fn comment(&self) -> Option<String> {
+        self.inner.borrow().comment.clone()
+    }
 
     /// Sets the comment on a given node.
     ///
@@ -150,8 +214,6 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let e4_comment_str = "this blunders into the Sicilian Defense";
     /// let pgn_str = format!("1. e4 {{ {} }}  1... c5", e4_comment_str);
     /// let game = sacrifice::read_pgn(pgn_str.as_str());
@@ -167,12 +229,22 @@ pub trait Node: Sized + Clone + PartialEq + Default {
     ///   Some(e4_comment_alt_str.to_string()) // it just is
     /// );
     /// ```
-    fn set_comment(&self, new_comment: Option<String>) -> Option<String>;
+    pub fn set_comment(&self, new_comment: Option<String>) -> Option<String> {
+        std::mem::replace(&mut self.inner.borrow_mut().comment, new_comment)
+    }
 }
 
-pub trait NodePropertiesExt: Node {
-    fn push_nag(&mut self, nag: u8);
-    fn clear_nags(&mut self);
+impl Node {
+    pub fn push_nag(&mut self, nag: u8) {
+        if let Some(mut nags) = self.nags() {
+            nags.insert(nag);
+            self.set_nags(nags);
+        }
+    }
+
+    pub fn clear_nags(&mut self) {
+        self.set_nags(HashSet::new());
+    }
 
     /// Returns the mainline variation of the given node.
     ///
@@ -183,13 +255,13 @@ pub trait NodePropertiesExt: Node {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let game = sacrifice::read_pgn("1. e4 e5");
     /// let mainline_node_1 = game.root().mainline(); // 1. e4 node
     /// assert!(mainline_node_1.is_some()); // It exists
     /// ```
-    fn mainline(&self) -> Option<Self>;
+    pub fn mainline(&self) -> Option<Self> {
+        self.variation_vec().get(0).cloned()
+    }
 
     /// Returns variations (excluding mainline) of the given node.
     ///
@@ -202,13 +274,19 @@ pub trait NodePropertiesExt: Node {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let game = sacrifice::read_pgn("1. e4 (1. d4) 1... e5");
     /// let variation_nodes_1 = game.root().other_variations(); // [1. d4]
     /// assert!(!variation_nodes_1.is_empty()); // It exists
     /// ```
-    fn other_variations(&self) -> Vec<Self>;
+    pub fn other_variations(&self) -> Vec<Self> {
+        let mut variations = self.variation_vec();
+        if variations.is_empty() {
+            return Vec::new();
+        }
+
+        variations.remove(0);
+        variations
+    }
 
     /// Returns siblings (other variations of the parent node) of the given node.
     ///
@@ -221,67 +299,13 @@ pub trait NodePropertiesExt: Node {
     /// # Examples
     ///
     /// ```
-    /// use sacrifice::prelude::*;
-    ///
     /// let game = sacrifice::read_pgn("1. e4 (1. d4) 1... e5");
     /// let root = game.root();
     /// let e4_node = root.mainline().expect("e4 node should exist");
     /// let e4_siblings = e4_node.siblings();
     /// assert!(!e4_siblings.is_empty()); // It exists
     /// ```
-    fn siblings(&self) -> Vec<Self>;
-
-    fn new_variation(&mut self, m: Move) -> Self;
-    fn remove_variation(&mut self, node: Self) -> bool;
-
-    /// Promotes a node to the mainline variation of its parent.
-    ///
-    /// # Arguments
-    ///
-    /// * `node_id` - id of the node to promote
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sacrifice::prelude::*;
-    ///
-    /// let mut game = sacrifice::read_pgn("1. d4 (1. e4) 1... d5");
-    /// let variation_node_1_0 = game.root().other_variations()[0].clone(); // (1. e4)
-    /// assert!(
-    ///   game.root().promote_variation(variation_node_1_0.clone()), // promote 1. e4 to mainline
-    /// );
-    /// assert_eq!(
-    ///   game.root().mainline(),
-    ///   Some(variation_node_1_0.clone())
-    /// );
-    /// ```
-    fn promote_variation(&mut self, node: Self) -> bool;
-}
-
-impl<N: Node> NodePropertiesExt for N {
-    fn push_nag(&mut self, nag: u8) {
-        if let Some(mut nags) = self.nags() {
-            nags.insert(nag);
-            self.set_nags(nags);
-        }
-    }
-    fn clear_nags(&mut self) {
-        self.set_nags(HashSet::new());
-    }
-
-    fn mainline(&self) -> Option<Self> {
-        self.variation_vec().get(0).cloned()
-    }
-    fn other_variations(&self) -> Vec<Self> {
-        let mut variations = self.variation_vec();
-        if variations.is_empty() {
-            return Vec::new();
-        }
-
-        variations.remove(0);
-        variations
-    }
-    fn siblings(&self) -> Vec<Self> {
+    pub fn siblings(&self) -> Vec<Self> {
         let parent = if let Some(val) = self.parent() {
             val
         } else {
@@ -293,14 +317,15 @@ impl<N: Node> NodePropertiesExt for N {
         variation_vec
     }
 
-    fn new_variation(&mut self, m: Move) -> Self {
+    pub fn new_variation(&mut self, m: Move) -> Self {
         let next_node = Self::from_node(self.clone(), m);
         let mut variation_vec = self.variation_vec();
         variation_vec.push(next_node.clone());
         self.set_variation_vec(variation_vec);
         next_node
     }
-    fn remove_variation(&mut self, node: Self) -> bool {
+
+    pub fn remove_variation(&mut self, node: Self) -> bool {
         let mut variation_vec = self.variation_vec();
         let variations_size = variation_vec.len();
         variation_vec.retain(|v| v != &node);
@@ -308,7 +333,27 @@ impl<N: Node> NodePropertiesExt for N {
         self.set_variation_vec(variation_vec);
         removed
     }
-    fn promote_variation(&mut self, node: Self) -> bool {
+
+    /// Promotes a node to the mainline variation of its parent.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - id of the node to promote
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut game = sacrifice::read_pgn("1. d4 (1. e4) 1... d5");
+    /// let variation_node_1_0 = game.root().other_variations()[0].clone(); // (1. e4)
+    /// assert!(
+    ///   game.root().promote_variation(variation_node_1_0.clone()), // promote 1. e4 to mainline
+    /// );
+    /// assert_eq!(
+    ///   game.root().mainline(),
+    ///   Some(variation_node_1_0.clone())
+    /// );
+    /// ```
+    pub fn promote_variation(&mut self, node: Self) -> bool {
         let mut variation_vec = self.variation_vec();
         let variations_size = variation_vec.len();
         variation_vec.retain(|v| v != &node);
@@ -325,83 +370,8 @@ impl<N: Node> NodePropertiesExt for N {
     }
 }
 
-pub trait NodeTreeTraversalExt: Node {
-    fn root(&self) -> Self;
-    fn depth(&self) -> u32;
-
-    /// Returns the array of moves that leads to the given node.
-    ///
-    /// # Arguments
-    ///
-    /// * `node_id` - id of the given node
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sacrifice::prelude::*;
-    ///
-    /// let game = sacrifice::read_pgn("1. e4 c5");
-    /// let mainline_node_1 = game.root().mainline().unwrap(); // 1. e4
-    /// let mainline_node_2 = mainline_node_1.mainline().unwrap(); // 1... c5
-    /// let moves = mainline_node_2.moves(); // 1. e4 c5
-    /// assert_eq!(moves[0].to(), sacrifice::Square::E4);
-    /// assert_eq!(moves[1].to(), sacrifice::Square::C5);
-    /// ```
-    fn moves(&self) -> Vec<Move>;
-
-    /// Returns the board position at a given node.
-    ///
-    /// Returns `None` if given node cannot be found in the tree.
-    ///
-    /// # Arguments
-    ///
-    /// * `node_id` - id of the given node
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sacrifice::prelude::*;
-    ///
-    /// let game = sacrifice::read_pgn("1. e4 c5");
-    /// let mainline_node_1 = game.root().mainline().unwrap(); // 1. e4
-    /// let mainline_node_2 = mainline_node_1.mainline().unwrap(); // 1... c5
-    /// let fen: sacrifice::Fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2".parse().unwrap();
-    /// let actual_position: sacrifice::Chess = fen.clone().into_position(sacrifice::CastlingMode::Standard).unwrap();
-    /// assert_eq!(
-    ///   mainline_node_2.board(&game.initial_position()),
-    ///   actual_position
-    /// )
-    /// ```
-    fn board(&self, initial_position: &Chess) -> Chess;
-
-    /// Returns the board position before a given node.
-    ///
-    /// Returns `None` if given node cannot be found in the tree.
-    ///
-    /// # Arguments
-    ///
-    /// * `node_id` - id of the given node
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use sacrifice::prelude::*;
-    ///
-    /// let game = sacrifice::read_pgn("1. e4 c5");
-    /// let mainline_node_1 = game.root().mainline().unwrap(); // 1. e4
-    /// let mainline_node_2 = mainline_node_1.mainline().unwrap(); // 1... c5
-    /// let fen: sacrifice::Fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1".parse().unwrap();
-    /// let actual_position: sacrifice::Chess = fen.clone().into_position(sacrifice::CastlingMode::Standard).unwrap();
-    /// assert_eq!(
-    ///   mainline_node_2.board_before(&game.initial_position()),
-    ///   actual_position
-    /// )
-    /// ```
-    fn board_before(&self, initial_position: &Chess) -> Chess;
-}
-
-impl<N: Node> NodeTreeTraversalExt for N {
-    fn root(&self) -> Self {
+impl Node {
+    pub fn root(&self) -> Self {
         let mut node = self.clone();
         while let Some(parent) = node.parent() {
             node = parent;
@@ -409,7 +379,7 @@ impl<N: Node> NodeTreeTraversalExt for N {
         node
     }
 
-    fn depth(&self) -> u32 {
+    pub fn depth(&self) -> u32 {
         let mut result: u32 = 0;
 
         let mut node: Self = self.clone();
@@ -420,7 +390,23 @@ impl<N: Node> NodeTreeTraversalExt for N {
         result
     }
 
-    fn moves(&self) -> Vec<Move> {
+    /// Returns the array of moves that leads to the given node.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - id of the given node
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let game = sacrifice::read_pgn("1. e4 c5");
+    /// let mainline_node_1 = game.root().mainline().unwrap(); // 1. e4
+    /// let mainline_node_2 = mainline_node_1.mainline().unwrap(); // 1... c5
+    /// let moves = mainline_node_2.moves(); // 1. e4 c5
+    /// assert_eq!(moves[0].to(), sacrifice::Square::E4);
+    /// assert_eq!(moves[1].to(), sacrifice::Square::C5);
+    /// ```
+    pub fn moves(&self) -> Vec<Move> {
         let mut move_vec: Vec<Move> = Vec::new();
 
         let mut node: Self = self.clone();
@@ -434,7 +420,28 @@ impl<N: Node> NodeTreeTraversalExt for N {
         move_vec
     }
 
-    fn board(&self, initial_position: &Chess) -> Chess {
+    /// Returns the board position at a given node.
+    ///
+    /// Returns `None` if given node cannot be found in the tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - id of the given node
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let game = sacrifice::read_pgn("1. e4 c5");
+    /// let mainline_node_1 = game.root().mainline().unwrap(); // 1. e4
+    /// let mainline_node_2 = mainline_node_1.mainline().unwrap(); // 1... c5
+    /// let fen: sacrifice::Fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2".parse().unwrap();
+    /// let actual_position: sacrifice::Chess = fen.clone().into_position(sacrifice::CastlingMode::Standard).unwrap();
+    /// assert_eq!(
+    ///   mainline_node_2.position(&game.initial_position()),
+    ///   actual_position
+    /// )
+    /// ```
+    pub fn position(&self, initial_position: &Chess) -> Chess {
         let mut board = initial_position.clone();
 
         let move_vec = self.moves();
@@ -445,15 +452,93 @@ impl<N: Node> NodeTreeTraversalExt for N {
         board
     }
 
-    fn board_before(&self, initial_position: &Chess) -> Chess {
-        let mut board = initial_position.clone();
-
-        let mut move_vec = self.moves();
-        move_vec.pop(); // Remove latest move
-        for _move in move_vec {
-            board.play_unchecked(&_move);
+    /// Add a move to a given node in the game tree.
+    ///
+    /// Returns `None` if the move is illegal, or if given node is not found in the tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent_id` - designated parent node of the newly created node
+    /// * `m` - a (possibly illegal) chess move
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut game = sacrifice::read_pgn("1. d4");
+    /// let mut mainline_node_1 = game.root().mainline().unwrap();
+    /// let illegal_move = sacrifice::Move::Normal {
+    ///    role: sacrifice::Role::Queen,
+    ///    from: sacrifice::Square::D8,
+    ///    to: sacrifice::Square::H4,
+    ///    capture: None,
+    ///    promotion: None,
+    /// };
+    /// assert!(mainline_node_1.add_node(
+    ///     illegal_move, &game.initial_position()
+    /// ).is_none());
+    /// let legal_move = sacrifice::Move::Normal {
+    ///    role: sacrifice::Role::Pawn,
+    ///    from: sacrifice::Square::E7,
+    ///    to: sacrifice::Square::E5,
+    ///    capture: None,
+    ///    promotion: None,
+    /// };
+    /// let new_node = mainline_node_1.add_node(
+    ///     legal_move, &game.initial_position()
+    /// );
+    /// assert!(new_node.is_some());
+    /// assert_eq!(
+    ///   mainline_node_1.mainline().unwrap(),
+    ///   new_node.unwrap()
+    /// );
+    /// ```
+    pub fn add_node(&mut self, m: Move, initial_position: &Chess) -> Option<Node> {
+        // Check if the move is legal
+        let cur_position = self.position(initial_position);
+        if !cur_position.is_legal(&m) {
+            return None; // Not legal move
         }
 
-        board
+        let node_next = Node::from_node(self.clone(), m);
+        let mut variation_vec = self.variation_vec();
+        variation_vec.push(node_next.clone());
+        self.set_variation_vec(variation_vec);
+
+        Some(node_next)
+    }
+
+    /// Remove all occurrences of the given node from the game tree.
+    ///
+    /// Returns the given node's id if successful.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - id of the given node
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut game = sacrifice::read_pgn("1. d4");
+    /// let mut mainline_node_1 = game.root().mainline().unwrap();
+    /// assert!(mainline_node_1.remove_node().is_some()); // No child nodes left
+    /// assert!(game.root().mainline().is_none());
+    /// ```
+    pub fn remove_node(&mut self) -> Option<Node> {
+        let mut parent = if let Some(val) = self.parent() {
+            val
+        } else {
+            println!("node has no parent - attempting to delete root node?");
+            return None;
+        };
+
+        // Remove this node from its parent
+        if parent.remove_variation(self.clone()) {
+            return Some(self.clone());
+        }
+
+        // How did we get here?
+        println!("node has parent, yet is not its child");
+
+        None
     }
 }

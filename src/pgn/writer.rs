@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::game::{Game, Node};
 use crate::{Chess, Color, Move, Position};
 
 pub(crate) trait PartialAcceptor {
@@ -9,12 +9,40 @@ pub(crate) trait FullAcceptor {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Result;
 }
 
-pub(crate) trait NodeAcceptor: Node {
+impl FullAcceptor for Game {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Result {
+        visitor.begin_game();
+
+        visitor.begin_headers();
+        {
+            self.header.accept(visitor);
+
+            for (key, value) in &self.opt_headers {
+                visitor.visit_header(key, value);
+            }
+        }
+        visitor.end_headers();
+
+        if let Some(comment) = self.root.comment() {
+            // Game comment
+            visitor.visit_comment(comment);
+        }
+
+        self.root.accept(&self.initial_position, visitor);
+
+        let result = self.header.result.to_string();
+        visitor.visit_result(result.as_str());
+
+        visitor.end_game()
+    }
+}
+
+pub(crate) trait NodeAcceptor {
     fn accept_inner<V: Visitor>(&self, prev_position: &Chess, visitor: &mut V);
     fn accept<V: Visitor>(&self, initial_position: &Chess, visitor: &mut V);
 }
 
-impl<N: Node> NodeAcceptor for N {
+impl NodeAcceptor for Node {
     fn accept_inner<V: Visitor>(&self, prev_position: &Chess, visitor: &mut V) {
         if let Some(starting_comment) = self.starting_comment() {
             visitor.visit_comment(starting_comment);
@@ -42,7 +70,7 @@ impl<N: Node> NodeAcceptor for N {
             return;
         };
 
-        let prev_position = self.board(initial_position);
+        let prev_position = self.position(initial_position);
 
         main_node.accept_inner(&prev_position, visitor);
 

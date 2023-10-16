@@ -1,57 +1,37 @@
-use crate::prelude::*;
-
-use crate::header::Header;
-use crate::{Chess, Move};
+use crate::game::{Game, Header, Node};
+use crate::Chess;
 
 use pgn_reader::{Nag, RawComment};
 use std::collections::HashMap;
 
-pub trait NodeBuilder<N: Node>: Default + Clone {
-    fn new_node(&mut self) -> N;
-    fn new_node_from(&mut self, parent: N, m: Move) -> N;
-    fn remove_node(&mut self, node: N);
-}
-
-#[derive(Default, Clone)]
-pub struct VisitedGame<N: Node, B: NodeBuilder<N>> {
-    pub header: Header,
-    pub opt_headers: HashMap<String, String>,
-
-    pub initial_position: Chess,
-
-    pub root: N,
-    pub node_builder: B,
-}
-
 // Predecessor of Game struct
-struct PartialGame<N: Node, B: NodeBuilder<N>> {
+struct PartialGame {
     header: Header,
     opt_headers: HashMap<String, String>,
 
     initial_position: Chess,
 
-    root: N,
-    node_builder: B,
+    root: Node,
 
-    variation_stack: Vec<N>,
+    variation_stack: Vec<Node>,
     in_variation: bool,
 
     starting_comment: Option<String>,
 }
 
-enum GameVisitor<N: Node, B: NodeBuilder<N>> {
+enum GameVisitor {
     None,
-    InGame { inner: PartialGame<N, B> },
+    InGame { inner: PartialGame },
 }
 
-impl<N: Node, B: NodeBuilder<N>> GameVisitor<N, B> {
+impl GameVisitor {
     fn new() -> Self {
         Self::None
     }
 }
 
-impl<N: Node, B: NodeBuilder<N>> GameVisitor<N, B> {
-    fn try_get_inner(&mut self) -> Option<&mut PartialGame<N, B>> {
+impl GameVisitor {
+    fn try_get_inner(&mut self) -> Option<&mut PartialGame> {
         match self {
             GameVisitor::None => None,
             GameVisitor::InGame { inner: tree } => Some(tree),
@@ -59,12 +39,11 @@ impl<N: Node, B: NodeBuilder<N>> GameVisitor<N, B> {
     }
 }
 
-impl<N: Node, B: NodeBuilder<N>> pgn_reader::Visitor for GameVisitor<N, B> {
-    type Result = VisitedGame<N, B>;
+impl pgn_reader::Visitor for GameVisitor {
+    type Result = Game;
 
     fn begin_game(&mut self) {
-        let mut node_builder = B::default();
-        let root = node_builder.new_node();
+        let root = Node::default();
 
         let variation_stack = vec![root.clone()];
 
@@ -74,7 +53,6 @@ impl<N: Node, B: NodeBuilder<N>> pgn_reader::Visitor for GameVisitor<N, B> {
             initial_position: Chess::new(),
 
             root,
-            node_builder,
 
             variation_stack,
             in_variation: false,
@@ -123,7 +101,7 @@ impl<N: Node, B: NodeBuilder<N>> pgn_reader::Visitor for GameVisitor<N, B> {
             return;
         };
 
-        let cur_position = cur_node.board(&inner.initial_position);
+        let cur_position = cur_node.position(&inner.initial_position);
 
         let m = if let Ok(val) = san_plus.san.to_move(&cur_position) {
             val
@@ -132,7 +110,7 @@ impl<N: Node, B: NodeBuilder<N>> pgn_reader::Visitor for GameVisitor<N, B> {
         };
 
         // A legal move
-        let mut next_node = inner.node_builder.new_node_from(cur_node.clone(), m);
+        let mut next_node = Node::from_node(cur_node.clone(), m);
         let mut variation_vec = cur_node.variation_vec();
         variation_vec.push(next_node.clone());
         cur_node.set_variation_vec(variation_vec);
@@ -237,7 +215,7 @@ impl<N: Node, B: NodeBuilder<N>> pgn_reader::Visitor for GameVisitor<N, B> {
         let inner = if let Some(val) = self.try_get_inner() {
             val
         } else {
-            return VisitedGame::default();
+            return Game::default();
         };
 
         let header = inner.header.clone();
@@ -245,25 +223,23 @@ impl<N: Node, B: NodeBuilder<N>> pgn_reader::Visitor for GameVisitor<N, B> {
         let initial_position = inner.initial_position.clone();
 
         let root = inner.root.clone();
-        let node_builder = inner.node_builder.clone();
 
         *self = Self::None;
 
-        VisitedGame {
+        Game {
             header,
             opt_headers,
             initial_position,
 
             root,
-            node_builder,
         }
     }
 }
 
-pub fn read_pgn<N: Node, B: NodeBuilder<N>>(pgn: &str) -> std::io::Result<VisitedGame<N, B>> {
+pub fn read_pgn(pgn: &str) -> std::io::Result<Game> {
     let mut reader = pgn_reader::BufferedReader::new_cursor(pgn);
 
-    let mut visitor: GameVisitor<N, B> = GameVisitor::new();
+    let mut visitor = GameVisitor::new();
     let visited_game = reader.read_game(&mut visitor)?.unwrap();
 
     Ok(visited_game)

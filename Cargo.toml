@@ -1,13 +1,24 @@
+[workspace]
+members = ["ffi"]
+
+[workspace.package]
+edition = "2021"
+version = "0.3.0-alpha.1"
+
+authors = ["soyflourbread <soyflourbread@gmail.com>"]
+
 [package]
 name = "sacrifice"
 description = "A feature-rich chess library for Rust"
-version = "0.2.0"
-edition = "2021"
+
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
 
 repository = "https://github.com/fr-therook/sacrifice"
 license = "MIT"
 keywords = ["chess", "pgn"]
 
 [dependencies]
-shakmaty = "0.24"
-pgn-reader = "0.23"
+shakmaty = "0.26"
+pgn-reader = "0.25"

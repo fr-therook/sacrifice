@@ -1,7 +1,6 @@
-use super::writer::Visitor;
-use crate::writer::PartialAcceptor;
+use super::writer::{PartialAcceptor, Visitor};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum GameResult {
     Finished { white_score: u32, black_score: u32 },
     Ongoing,
@@ -48,7 +47,7 @@ impl std::fmt::Display for GameResult {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Header {
     pub event: Option<String>,
     pub site: Option<String>,
