@@ -68,9 +68,9 @@ mod ffi {
     extern "Rust" {
         type Node;
 
-        fn position(&self, initial_position: &CurPosition) -> Box<CurPosition>;
+        fn position(&self) -> Box<CurPosition>;
 
-        fn prev_move(&self, initial_position: &CurPosition) -> *const Move;
+        fn prev_move(&self) -> *const Move;
         fn prev_node(&self) -> *const Node;
         fn next_mainline_node(&self) -> *const Node;
 
@@ -78,7 +78,7 @@ mod ffi {
         fn siblings(&self) -> Vec<Node>;
         fn mainline_nodes(&self) -> Vec<Node>;
 
-        fn add_node(&self, m: &Move, initial_position: &CurPosition) -> *const Node;
+        fn new_variation(&self, m: &Move) -> *const Node;
     }
 
     extern "Rust" {
@@ -393,11 +393,11 @@ impl CurPosition {
 struct Node(sac::game::Node);
 
 impl Node {
-    fn position(&self, initial_position: &CurPosition) -> Box<CurPosition> {
-        Box::new(CurPosition(self.0.position(&initial_position.0)))
+    fn position(&self) -> Box<CurPosition> {
+        Box::new(CurPosition(self.0.position()))
     }
 
-    fn prev_move(&self, initial_position: &CurPosition) -> *const Move {
+    fn prev_move(&self) -> *const Move {
         let parent = if let Some(inner) = self.0.parent() {
             inner
         } else {
@@ -409,7 +409,7 @@ impl Node {
             return std::ptr::null();
         };
 
-        let pos_prev = parent.position(&initial_position.0);
+        let pos_prev = parent.position();
         let san = sac::SanPlus::from_move(pos_prev, &m);
         let ret = Box::new(Move { inner: m, san });
 
@@ -459,11 +459,11 @@ impl Node {
         node_vec.into_iter().map(Node).collect::<Vec<_>>()
     }
 
-    fn add_node(&self, m: &Move, initial_position: &CurPosition) -> *const Node {
+    fn new_variation(&self, m: &Move) -> *const Node {
         let ret: Box<Node> = if let Some(inner) = self
             .0
             .clone()
-            .add_node(m.inner.clone(), &initial_position.0)
+            .new_variation(m.inner.clone())
         {
             Box::new(Node(inner))
         } else {

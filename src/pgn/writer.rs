@@ -28,7 +28,7 @@ impl FullAcceptor for Game {
             visitor.visit_comment(comment);
         }
 
-        self.root.accept(&self.initial_position, visitor);
+        self.root.accept(&self.initial_position(), visitor);
 
         let result = self.header.result.to_string();
         visitor.visit_result(result.as_str());
@@ -70,9 +70,7 @@ impl NodeAcceptor for Node {
             return;
         };
 
-        let prev_position = self.position(initial_position);
-
-        main_node.accept_inner(&prev_position, visitor);
+        main_node.accept_inner(&self.position(), visitor);
 
         // Visit variation nodes after
         let mut variation_node_vec = self.variation_vec();
@@ -82,7 +80,7 @@ impl NodeAcceptor for Node {
                 continue; // Skip this variation
             }
 
-            variation_node.accept_inner(&prev_position, visitor);
+            variation_node.accept_inner(&self.position(), visitor);
 
             // Recursively visiting variation node
             variation_node.accept(initial_position, visitor);

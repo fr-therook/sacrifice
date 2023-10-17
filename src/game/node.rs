@@ -6,48 +6,79 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
-struct PrevInfo {
-    node: Node,                       // parent node
-    next_move: Move,                  // this node's previous move
-    starting_comment: Option<String>, // Comment about starting a variation
-    nag_set: HashSet<u8>,             // this node's nag attributes
+struct ParentState {
+    /// This node's parent
+    node: Node,
+    /// The move that leads to this position
+    move_next: Move,
+
+    /// Comment about the start of a variation
+    starting_comment: Option<String>,
+    /// this node's nag attributes
+    nag_set: HashSet<u8>,
 }
 
 #[derive(Debug, Clone, Default)]
-struct NodeInner {
-    prev: Option<PrevInfo>,
+pub struct NodeImpl {
+    parent: Option<ParentState>,
+
+    /// Position of current node
+    position: Chess,
+
+    /// Children nodes (variations), including mainline
     variation_vec: Vec<Node>,
+    /// Comment against this node
     comment: Option<String>,
 }
 
+/// A node in the game tree.
 #[derive(Debug, Clone, Default)]
-pub struct Node {
-    inner: Rc<RefCell<NodeInner>>,
-}
+pub struct Node(Rc<RefCell<NodeImpl>>);
 
 impl PartialEq<Self> for Node {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.inner, &other.inner)
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+// Constructors
+impl Node {
+    pub(crate) fn from_position(position: Chess) -> Self {
+        let ret = NodeImpl {
+            position,
+            ..NodeImpl::default()
+        };
+        let ret = Rc::new(RefCell::new(ret));
+
+        Self(ret)
+    }
+
+    pub(crate) fn from_node(node: Self, move_next: Move) -> Option<Self> {
+        let position_next = if let Ok(inner) = node.position()
+            .play(&move_next) {
+            inner
+        } else { return None; };
+
+        let ret = NodeImpl {
+            parent: Some(ParentState {
+                node,
+                move_next,
+                starting_comment: None,
+                nag_set: HashSet::new(),
+            }),
+
+            position: position_next,
+
+            variation_vec: Vec::new(),
+            comment: None,
+        };
+        let ret = Rc::new(RefCell::new(ret));
+
+        Some(Self(ret))
     }
 }
 
 impl Node {
-    pub fn from_node(parent: Self, m: Move) -> Self {
-        let inner = NodeInner {
-            prev: Some(PrevInfo {
-                node: parent,
-                next_move: m,
-                starting_comment: None,
-                nag_set: HashSet::new(),
-            }),
-            variation_vec: Vec::new(),
-            comment: None,
-        };
-        let inner = Rc::new(RefCell::new(inner));
-
-        Self { inner }
-    }
-
     /// Returns the parent node of the given node.
     ///
     /// # Arguments
@@ -67,7 +98,11 @@ impl Node {
     /// );
     /// ```
     pub fn parent(&self) -> Option<Self> {
-        Some(self.inner.borrow().prev.clone()?.node)
+        if let Some(ref parent) = self.0.borrow().parent {
+            return Some(parent.node.clone());
+        }
+
+        None
     }
 
     /// Returns the move that leads to the given node.
@@ -87,16 +122,20 @@ impl Node {
     /// );
     /// ```
     pub fn prev_move(&self) -> Option<Move> {
-        Some(self.inner.borrow().prev.clone()?.next_move)
+        if let Some(ref parent) = self.0.borrow().parent {
+            return Some(parent.move_next.clone());
+        }
+
+        None
     }
 
     pub fn variation_vec(&self) -> Vec<Self> {
-        self.inner.borrow().variation_vec.clone()
+        self.0.borrow().variation_vec.clone()
     }
 
     pub fn set_variation_vec(&mut self, new_variation_vec: Vec<Self>) -> Vec<Self> {
         std::mem::replace(
-            &mut self.inner.borrow_mut().variation_vec,
+            &mut self.0.borrow_mut().variation_vec,
             new_variation_vec,
         )
     }
@@ -121,7 +160,11 @@ impl Node {
     /// );
     /// ```
     pub fn starting_comment(&self) -> Option<String> {
-        self.inner.borrow().prev.clone()?.starting_comment
+        if let Some(ref parent) = self.0.borrow().parent {
+            return parent.starting_comment.clone();
+        }
+
+        None
     }
 
     /// Sets the starting comment of the given node.
@@ -143,9 +186,9 @@ impl Node {
     ///   Some("Ok".to_string())
     /// );
     /// ```
-    pub fn set_starting_comment(&mut self, new_comment: Option<String>) -> Option<String> {
-        if let Some(ref mut prev) = self.inner.borrow_mut().prev {
-            return std::mem::replace(&mut prev.starting_comment, new_comment);
+    pub fn set_starting_comment(&mut self, comment_next: Option<String>) -> Option<String> {
+        if let Some(ref mut parent) = self.0.borrow_mut().parent {
+            return std::mem::replace(&mut parent.starting_comment, comment_next);
         }
 
         None
@@ -167,16 +210,16 @@ impl Node {
     /// assert!(mainline_node_2.nags().unwrap().contains(&1)); // ! -> $1
     /// ```
     pub fn nags(&self) -> Option<HashSet<u8>> {
-        if let Some(ref prev) = self.inner.borrow().prev {
-            return Some(prev.nag_set.iter().copied().collect());
+        if let Some(ref parent) = self.0.borrow().parent {
+            return Some(parent.nag_set.clone());
         }
 
         None
     }
 
-    pub fn set_nags(&mut self, new_nags: HashSet<u8>) -> Option<HashSet<u8>> {
-        if let Some(ref mut prev) = self.inner.borrow_mut().prev {
-            return Some(std::mem::replace(&mut prev.nag_set, new_nags));
+    pub fn set_nags(&mut self, nags_next: HashSet<u8>) -> Option<HashSet<u8>> {
+        if let Some(ref mut parent) = self.0.borrow_mut().parent {
+            return Some(std::mem::replace(&mut parent.nag_set, nags_next));
         }
 
         None
@@ -201,7 +244,7 @@ impl Node {
     /// );
     /// ```
     pub fn comment(&self) -> Option<String> {
-        self.inner.borrow().comment.clone()
+        self.0.borrow().comment.clone()
     }
 
     /// Sets the comment on a given node.
@@ -229,8 +272,8 @@ impl Node {
     ///   Some(e4_comment_alt_str.to_string()) // it just is
     /// );
     /// ```
-    pub fn set_comment(&self, new_comment: Option<String>) -> Option<String> {
-        std::mem::replace(&mut self.inner.borrow_mut().comment, new_comment)
+    pub fn set_comment(&self, comment_next: Option<String>) -> Option<String> {
+        std::mem::replace(&mut self.0.borrow_mut().comment, comment_next)
     }
 }
 
@@ -317,12 +360,48 @@ impl Node {
         variation_vec
     }
 
-    pub fn new_variation(&mut self, m: Move) -> Self {
-        let next_node = Self::from_node(self.clone(), m);
+    /// Add a move to a given node in the game tree.
+    ///
+    /// Returns `None` if the move is illegal, or if given node is not found in the tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent_id` - designated parent node of the newly created node
+    /// * `m` - a (possibly illegal) chess move
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut game = sacrifice::read_pgn("1. d4");
+    /// let mut mainline_node_1 = game.root().mainline().unwrap();
+    /// let illegal_move = sacrifice::Move::Normal {
+    ///    role: sacrifice::Role::Queen,
+    ///    from: sacrifice::Square::D8,
+    ///    to: sacrifice::Square::H4,
+    ///    capture: None,
+    ///    promotion: None,
+    /// };
+    /// assert!(mainline_node_1.new_variation(illegal_move).is_none());
+    /// let legal_move = sacrifice::Move::Normal {
+    ///    role: sacrifice::Role::Pawn,
+    ///    from: sacrifice::Square::E7,
+    ///    to: sacrifice::Square::E5,
+    ///    capture: None,
+    ///    promotion: None,
+    /// };
+    /// let new_node = mainline_node_1.new_variation(legal_move);
+    /// assert!(new_node.is_some());
+    /// assert_eq!(
+    ///   mainline_node_1.mainline().unwrap(),
+    ///   new_node.unwrap()
+    /// );
+    /// ```
+    pub fn new_variation(&mut self, move_next: Move) -> Option<Self> {
+        let node_next = Self::from_node(self.clone(), move_next)?;
         let mut variation_vec = self.variation_vec();
-        variation_vec.push(next_node.clone());
+        variation_vec.push(node_next.clone());
         self.set_variation_vec(variation_vec);
-        next_node
+        Some(node_next)
     }
 
     pub fn remove_variation(&mut self, node: Self) -> bool {
@@ -437,74 +516,12 @@ impl Node {
     /// let fen: sacrifice::Fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2".parse().unwrap();
     /// let actual_position: sacrifice::Chess = fen.clone().into_position(sacrifice::CastlingMode::Standard).unwrap();
     /// assert_eq!(
-    ///   mainline_node_2.position(&game.initial_position()),
+    ///   mainline_node_2.position(),
     ///   actual_position
     /// )
     /// ```
-    pub fn position(&self, initial_position: &Chess) -> Chess {
-        let mut board = initial_position.clone();
-
-        let move_vec = self.moves();
-        for _move in move_vec {
-            board.play_unchecked(&_move);
-        }
-
-        board
-    }
-
-    /// Add a move to a given node in the game tree.
-    ///
-    /// Returns `None` if the move is illegal, or if given node is not found in the tree.
-    ///
-    /// # Arguments
-    ///
-    /// * `parent_id` - designated parent node of the newly created node
-    /// * `m` - a (possibly illegal) chess move
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let mut game = sacrifice::read_pgn("1. d4");
-    /// let mut mainline_node_1 = game.root().mainline().unwrap();
-    /// let illegal_move = sacrifice::Move::Normal {
-    ///    role: sacrifice::Role::Queen,
-    ///    from: sacrifice::Square::D8,
-    ///    to: sacrifice::Square::H4,
-    ///    capture: None,
-    ///    promotion: None,
-    /// };
-    /// assert!(mainline_node_1.add_node(
-    ///     illegal_move, &game.initial_position()
-    /// ).is_none());
-    /// let legal_move = sacrifice::Move::Normal {
-    ///    role: sacrifice::Role::Pawn,
-    ///    from: sacrifice::Square::E7,
-    ///    to: sacrifice::Square::E5,
-    ///    capture: None,
-    ///    promotion: None,
-    /// };
-    /// let new_node = mainline_node_1.add_node(
-    ///     legal_move, &game.initial_position()
-    /// );
-    /// assert!(new_node.is_some());
-    /// assert_eq!(
-    ///   mainline_node_1.mainline().unwrap(),
-    ///   new_node.unwrap()
-    /// );
-    /// ```
-    pub fn add_node(&mut self, m: Move, initial_position: &Chess) -> Option<Node> {
-        // Check if the move is legal
-        let cur_position = self.position(initial_position);
-        if !cur_position.is_legal(&m) {
-            return None; // Not legal move
-        }
-
-        let node_next = Node::from_node(self.clone(), m);
-        let mut variation_vec = self.variation_vec();
-        variation_vec.push(node_next.clone());
-        self.set_variation_vec(variation_vec);
-
-        Some(node_next)
+    pub fn position(&self) -> Chess {
+        self.0.borrow().position.clone()
     }
 
     /// Remove all occurrences of the given node from the game tree.

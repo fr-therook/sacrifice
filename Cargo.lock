@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "sacrifice"
-version = "0.3.0-alpha.1"
+version = "0.3.0-alpha.2"
 dependencies = [
  "pgn-reader",
  "shakmaty",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "sacrifice-ffi"
-version = "0.3.0-alpha.1"
+version = "0.3.0-alpha.2"
 dependencies = [
  "cxx",
  "cxx-build",

@@ -1,5 +1,4 @@
 use crate::game::{Game, Header, Node};
-use crate::Chess;
 
 use pgn_reader::{Nag, RawComment};
 use std::collections::HashMap;
@@ -8,8 +7,6 @@ use std::collections::HashMap;
 struct PartialGame {
     header: Header,
     opt_headers: HashMap<String, String>,
-
-    initial_position: Chess,
 
     root: Node,
 
@@ -50,7 +47,6 @@ impl pgn_reader::Visitor for GameVisitor {
         let inner = PartialGame {
             header: Header::default(),
             opt_headers: HashMap::new(),
-            initial_position: Chess::new(),
 
             root,
 
@@ -76,7 +72,7 @@ impl pgn_reader::Visitor for GameVisitor {
                 .and_then(|f| f.into_position(shakmaty::CastlingMode::Standard).ok());
 
             if let Some(pos) = pos {
-                inner.initial_position = pos;
+                inner.root = Node::from_position(pos);
             }
         }
 
@@ -89,33 +85,30 @@ impl pgn_reader::Visitor for GameVisitor {
     }
 
     fn san(&mut self, san_plus: shakmaty::san::SanPlus) {
-        let inner = if let Some(val) = self.try_get_inner() {
-            val
+        let inner = if let Some(inner) = self.try_get_inner() {
+            inner
         } else {
             return;
         };
 
-        let cur_node = if let Some(val) = inner.variation_stack.last_mut() {
-            val
+        let cur_node = if let Some(inner) = inner.variation_stack.last_mut() {
+            inner
         } else {
             return;
         };
 
-        let cur_position = cur_node.position(&inner.initial_position);
-
-        let m = if let Ok(val) = san_plus.san.to_move(&cur_position) {
-            val
+        let move_next = if let Ok(inner) = san_plus.san.to_move(&cur_node.position()) {
+            inner
         } else {
             return;
         };
 
-        // A legal move
-        let mut next_node = Node::from_node(cur_node.clone(), m);
-        let mut variation_vec = cur_node.variation_vec();
-        variation_vec.push(next_node.clone());
-        cur_node.set_variation_vec(variation_vec);
-        next_node.set_starting_comment(inner.starting_comment.clone());
-        *cur_node = next_node;
+        // TODO:
+        let mut node_next = if let Some(inner) = cur_node.new_variation(move_next) {
+            inner
+        } else { return; };
+        node_next.set_starting_comment(inner.starting_comment.clone());
+        *cur_node = node_next;
 
         inner.starting_comment = None;
         inner.in_variation = true;
@@ -220,7 +213,6 @@ impl pgn_reader::Visitor for GameVisitor {
 
         let header = inner.header.clone();
         let opt_headers = inner.opt_headers.clone();
-        let initial_position = inner.initial_position.clone();
 
         let root = inner.root.clone();
 
@@ -229,7 +221,6 @@ impl pgn_reader::Visitor for GameVisitor {
         Game {
             header,
             opt_headers,
-            initial_position,
 
             root,
         }

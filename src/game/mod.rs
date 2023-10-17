@@ -10,13 +10,11 @@ use crate::Chess;
 
 /// A chess game with possible variations.
 ///
-/// It contains a simple BTree, plus header and initial position.
+/// It contains a simple Game Tree, plus headers.
 #[derive(Debug, Clone, Default)]
 pub struct Game {
-    pub(crate) header: Header,
-    pub(crate) opt_headers: HashMap<String, String>,
-
-    pub(crate) initial_position: Chess,
+    pub header: Header,
+    pub opt_headers: HashMap<String, String>,
 
     pub(crate) root: Node,
 }
@@ -36,7 +34,7 @@ impl Game {
     }
 
     pub fn initial_position(&self) -> Chess {
-        self.initial_position.clone()
+        self.root.position()
     }
 }
 
