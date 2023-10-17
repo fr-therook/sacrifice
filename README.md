@@ -19,7 +19,7 @@ https://img.shields.io/crates/v/shakmaty?color=red&logo=rust&label=crates.io%2Fs
 ](https://crates.io/crates/shakmaty).
 
 ```
-sac = { package = "sacrifice", version = "0.3.0-alpha.1" }
+sac = { package = "sacrifice", version = "0.3.0-alpha.2" }
 ```
 
 ## Example
@@ -41,10 +41,7 @@ fn main() {
         capture: None,
         promotion: None,
     };
-    let new_node = root.add_node(
-        open_sicilian,
-        &game.initial_position(),
-    ); // 2. Nf3 node
+    let mut new_node = root.new_variation(open_sicilian).unwrap(); // 2. Nf3 node
     println!("{}", game); // exports the PGN string after 2. Nf3
 
     // Take back the previous 2. Nf3 move
@@ -59,10 +56,7 @@ fn main() {
         capture: None,
         promotion: None,
     };
-    let new_node = root.add_node(
-        queens_pawn,
-        &game.initial_position(),
-    ); // 1. d4 node
+    let new_node = root.new_variation(queens_pawn); // 1. d4 node
     println!("{}", game); // 1. e4 (1. d4) 1... c5
 }
 ```
