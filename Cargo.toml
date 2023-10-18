@@ -3,7 +3,7 @@ members = ["ffi"]
 
 [workspace.package]
 edition = "2021"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 
 authors = ["soyflourbread <soyflourbread@gmail.com>"]
 

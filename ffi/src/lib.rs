@@ -1,6 +1,6 @@
 use sac::Position;
 
-#[cxx::bridge(namespace = "sacrifice")]
+#[cxx::bridge(namespace = "rustsac")]
 mod ffi {
     pub enum Color {
         Black = 0,
