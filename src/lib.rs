@@ -18,9 +18,9 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// let game = sacrifice::read_pgn("1. e4 e5");
+/// let game = sacrifice::read_pgn("1. e4 e5").unwrap();
 /// println!("{}", game); // Exports the game's PGN with default headers
 /// ```
-pub fn read_pgn(pgn: &str) -> game::Game {
-    pgn::reader::read_pgn(pgn).unwrap()
+pub fn read_pgn(pgn: &str) -> std::io::Result<game::Game> {
+    pgn::reader::read_pgn(pgn)
 }

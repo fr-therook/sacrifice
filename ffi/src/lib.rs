@@ -1,4 +1,4 @@
-use sac::Position;
+use sac::{Position};
 
 #[cxx::bridge(namespace = "rustsac")]
 mod ffi {
@@ -53,6 +53,8 @@ mod ffi {
 
     extern "Rust" {
         type CurPosition;
+        fn to_string(&self) -> String;
+
         fn turn(&self) -> Color;
 
         fn squares(&self) -> Vec<Square>;
@@ -84,6 +86,7 @@ mod ffi {
     extern "Rust" {
         type GameTree;
         fn game_default() -> Box<GameTree>;
+        fn game_from_pgn(pgn_str: String) -> *mut GameTree;
 
         fn root(&self) -> Box<Node>;
         fn initial_position(&self) -> Box<CurPosition>;
@@ -252,6 +255,10 @@ impl Move {
 struct CurPosition(sac::Chess);
 
 impl CurPosition {
+    fn to_string(&self) -> String {
+        self.0.board().to_string()
+    }
+
     fn turn(&self) -> ffi::Color {
         self.0.turn().into()
     }
@@ -479,6 +486,15 @@ struct GameTree(sac::game::Game);
 
 fn game_default() -> Box<GameTree> {
     Box::default()
+}
+
+fn game_from_pgn(pgn_str: String) -> *mut GameTree {
+    let ret = if let Ok(inner) = sac::read_pgn(pgn_str.as_str()) {
+        inner
+    } else { return std::ptr::null_mut(); };
+    let ret = GameTree(ret);
+    let ret = Box::new(ret);
+    Box::into_raw(ret)
 }
 
 impl GameTree {
